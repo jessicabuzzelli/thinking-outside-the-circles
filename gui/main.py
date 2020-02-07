@@ -2,40 +2,39 @@ from tkinter import *
 import pandas as pd
 import numpy as np
 from itertools import compress
+from sklearn.preprocessing import MinMaxScaler
+# from scripts.vectorize import Vectorize
 
 
 class GUI:
 
     def __init__(self):
-        self.loginPage()
+        self.home_page()
 
-    def loginPage(self):
+    def home_page(self):
         self.login = Tk()
         self.login.title("Click UPLOAD to begin")
         self.login.config(bg="white")
 
         frame = Frame(self.login)
 
-        upload_btn = Button(frame, text="UPLOAD", width=8, command=self.getfilename)
-        upload_btn.grid(column=1, row=3, sticky=W)
-
-        quit_btn = Button(frame, text="QUIT", width=8, command=self.login.destroy)
-        quit_btn.grid(column=2, row=3, sticky=W)
+        Button(frame, text="UPLOAD", width=8, command=self.get_filename).grid(column=1, row=3, sticky=W)
+        Button(frame, text="QUIT", width=8, command=self.login.destroy).grid(column=2, row=3, sticky=W)
 
         frame.grid(row=3, column=2)
 
         self.login.mainloop()
 
-    def getfilename(self):
+    def get_filename(self):
+        """ get file and define it contains recognized columns """
         from tkinter.filedialog import askopenfilename
-        filename = askopenfilename()
 
-        if not filename:
+        self.fname = askopenfilename()
+        if not self.fname:
             return
 
-        msg = self.checkfile()
-
-        if msg:
+        msg = self.check_file()
+        if msg is not None:
             return
 
         keep = ['qty_6mos',
@@ -49,6 +48,10 @@ class GUI:
                 'item_poi_days',
                 'dioh']
 
+        if all(x in keep[:5] for x in self.df.columns):
+            return
+
+        """ set input variables for input_page screen """
         self.field_options = ['turn_and_earn', 'revenue_6mos'] + [x for x in self.df.columns if x in keep]
 
         wh_options = self.df.legacy_division_cd.unique().astype(str)
@@ -56,52 +59,96 @@ class GUI:
         if wh_options is None:
             return
 
-        wh_options = np.append(['All'], wh_options)
+        self.wh_options = np.append(['All'], wh_options)
 
-        self.login.withdraw()
-        verify = Toplevel()
-        self.verify = verify
-        verify.title("Verify inputs")
-        verify.config(bg="white")
-        frame = Frame(verify)
-
-        label = Label(frame, text="Modify the following inputs and select RUN. ")
-        label.grid(column=0, row=0)
-
-        run_btn = Button(frame, text="RUN", width=8, command=self.formatdata)
-        run_btn.grid(column=1, row=0)
-
-        wh_label = Label(frame, text="Select warehouse(s) to analyze: ")
-        wh_label.grid(column=0, row=1)
+        self.segment_options = self.df.segment.unique()
+        if self.segment_options is None:
+            return
 
         self.wh_var = StringVar(self.login, value='All')
-        wh = OptionMenu(frame, self.wh_var, *wh_options)
-        wh.grid(column=1, row=1)
+        self.segment_var = StringVar(self.login, value=self.segment_options[0])
+        self.cutoff_var = StringVar(self.login, value='20')
+        self.field_var = []
 
-        field_label = Label(frame, text="Select fields(s) to include in analysis: ")
-        field_label.grid(column=0, row=2)
+        self.input_page()
 
-        self.field_var = []  # .set('All')
+    def input_page(self):
+        self.login.withdraw()
+        define = Toplevel()
+        self.define = define
+        define.title("Define inputs")
+        define.config(bg="white")
+        frame = Frame(define)
+        self.input_frame = frame
+
+        Label(frame, text="Modify model inputs below and click RUN. ").grid(row=0, column=0, pady=10)
+        Button(frame, text="RUN", width=8, command=self.check_inputs).grid(row=0, column=1, pady=10)
+
+        Label(frame, text="Select segment: ").grid(row=1, column=0, pady=10)
+        OptionMenu(frame, self.segment_var, *self.segment_options).grid(row=1, column=1, pady=10)
+
+        Label(frame, text="Select warehouse(s): ").grid(row=2, column=0, pady=10)
+        OptionMenu(frame, self.wh_var, *self.wh_options).grid(row=2, column=1, pady=10)
+
+        Label(frame, text=" % core products: ").grid(row=3, column=0, pady=10)
+        Entry(frame, textvariable=self.cutoff_var).grid(row=3, column=1, pady=10)
+
+        Label(frame, text="Field(s) to consider: ").grid(row=4, column=0, pady=10)
+
+        pad = len(max(self.field_options, key=len))
         for idx in range(len(self.field_options)):
             if idx in [0, 1]:
                 var = IntVar(self.login, value=1)
             else:
                 var = IntVar(self.login)
 
-            Checkbutton(frame, text=self.field_options[idx], variable=var).grid(row=2, column=idx + 1)
+            txt = self.field_options[idx]
+            b = Checkbutton(frame, text=txt + '  ' * (pad - len(txt)), variable=var, anchor="w")
+            b.grid(row=4 + (idx // 2), column=((idx + 1) % 2) + 1, pady=10)
             self.field_var.append(var)
 
-        frame.grid(row=3, column=len(self.field_options))
+        self.last_row = 3 + (len(self.field_options) // 2)
 
-        verify.mainloop()
+        frame.grid(row=4, column=len(self.field_options))
 
-    def formatdata(self):
-        self.verify.withdraw()
+        define.mainloop()
+
+    def check_inputs(self):
+        try:
+            float(self.cutoff_var.get())
+            self.format_vars()
+            self.output_page()
+
+        except ValueError:
+            Label(self.input_frame,text='ERROR. Enter a numeric value for % core products.')\
+                .grid(row=self.last_row + 1, column=0)
+            return
+
+    def format_vars(self):
+        self.field_var = [x.get() for x in self.field_var]
+
+        for var in [self.cutoff_var, self.segment_var, self.wh_var]:
+            var = var.get()
+
+        # if self.wh_var == 'All':
+        #     self_wh_var = self.wh_options[1:]
+
+
+    def output_page(self):
+        self.define.withdraw()
         outputs = Toplevel()
         self.outputs = outputs
         outputs.title("Outputs")
         outputs.config(bg="white")
         frame = Frame(outputs)
+
+        """ RUN BACKEND """
+        model = vectorize.Vectorize(wh=self.wh_var,
+                                    segment=self.segment_var,
+                                    fields=self.field_var,
+                                    field_options=self.field_options,
+                                    cutoff=self.cutoff_var,
+                                    df=self.df)
 
         label = Label(frame, text="Success!").grid(row=1, column=1)
 
@@ -109,21 +156,15 @@ class GUI:
 
         outputs.mainloop()
 
-    def checkfile(self):
-        try:
-            with open('input_data/path.txt') as f:
-                fname = f.read()
-        except FileNotFoundError:
-            return 'File not found. Select another file.'
-
-        ext = fname.split('.')[1]
+    def check_file(self):
+        ext = self.fname.split('.')[1]
         if ext == 'xlsx':
             try:
-                self.df = pd.read_excel(fname, sheet_name='Sheet1')
+                self.df = pd.read_excel(self.fname, sheet_name='Sheet1')
             except:  # TODO - run test on xlsx w/o multiple sheets and catch error
-                self.df = pd.read_excel(fname)
+                self.df = pd.read_excel(self.fname)
         elif ext == '.csv':
-            self.df = pd.read_csv(fname)
+            self.df = pd.read_csv(self.fname)
         else:
             return 'File extension not valid. Select another file.'
 
@@ -134,5 +175,47 @@ class GUI:
         except KeyError:
             pass
 
+        keep = ['legacy_division_cd',
+                'segment',
+                'legacy_product_cd',
+                'sales_channel',
+                'sales_6_mos',
+                'cogs_6mos',
+                'qty_6mos',
+                'picks_6mos',
+                'net_oh',
+                'legacy_customer_cd',
+                'core_item_flag',
+                'margin_%',
+                'net_oh_$',
+                'dioh']
 
-GUI()
+        self.df = self.df[keep].fillna(0).replace('-', 0)
+
+        continuous_labels = ['sales_6_mos',
+                             'qty_6mos',
+                             'cogs_6mos',
+                             'margin_%',
+                             'picks_6mos',
+                             'net_oh',
+                             'net_oh_$',
+                             'dioh']
+
+        self.df[continuous_labels] = self.df[continuous_labels][(self.df[continuous_labels] > 0)].fillna(0)
+
+
+        # TODO -- figure out why it isn't touching the last 5 columns
+        # scaler = MinMaxScaler()
+        #
+        # out = scaler.fit_transform(self.df[continuous_labels])
+        # df2 = pd.DataFrame(out, columns=continuous_labels)
+        #
+        # for column in df2.columns:
+        #     self.df[column] = df2[column]
+        #
+        # self.df.fillna(0)
+        #
+        # self.df.to_excel('input_data/cleaned_input.xlsx')
+
+if __name__ == "__main__":
+    GUI()
