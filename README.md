@@ -9,5 +9,4 @@ The repo has a folder called ```data``` that contains the data spreadsheet. I've
 
 ### Resources:
 1. How to use Git/GitHub: [https://guides.github.com/activities/hello-world/#commit]()
-- [GitHub desktop](https://desktop.github.com/) can be super helpful to avoid having to use the terminal/your IDE's VCS.
-1. [MapQuest Directions API](https://developer.mapquest.com/documentation/directions-api/): should be free, can be used to calculate driving distances in between warehouses
+    1. [GitHub desktop](https://desktop.github.com/) can be super helpful to avoid having to use the terminal/your IDE's VCS.

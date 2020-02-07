@@ -1,1 +1,4 @@
 data/**
+venv/**
+.ipynb_checkpoints/**
+gui/Clean_Data_short.xlsx
