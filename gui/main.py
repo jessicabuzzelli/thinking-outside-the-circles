@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from itertools import compress
 from sklearn.preprocessing import MinMaxScaler
-# from scripts.vectorize import Vectorize
+from gui.scripts.vectorize import Vectorize
 
 
 class GUI:
@@ -12,18 +12,18 @@ class GUI:
         self.home_page()
 
     def home_page(self):
-        self.login = Tk()
-        self.login.title("Click UPLOAD to begin")
-        self.login.config(bg="white")
+        self.root = Tk()
+        self.root.title("Click UPLOAD to begin")
+        self.root.config(bg="white")
 
-        frame = Frame(self.login)
+        frame = Frame(self.root)
 
         Button(frame, text="UPLOAD", width=8, command=self.get_filename).grid(column=1, row=3, sticky=W)
-        Button(frame, text="QUIT", width=8, command=self.login.destroy).grid(column=2, row=3, sticky=W)
+        Button(frame, text="QUIT", width=8, command=self.root.destroy).grid(column=2, row=3, sticky=W)
 
         frame.grid(row=3, column=2)
 
-        self.login.mainloop()
+        self.root.mainloop()
 
     def get_filename(self):
         """ get file and define it contains recognized columns """
@@ -37,22 +37,28 @@ class GUI:
         if msg is not None:
             return
 
-        keep = ['qty_6mos',
-                'cogs_6mos',
+        keep = ['legacy_division_cd',
+                'segment',
+                'legacy_product_cd',
+                'sales_channel',
                 'sales_6_mos',
+                'cogs_6mos',
+                'qty_6mos',
                 'picks_6mos',
-                'margin_%',
-                'net_OH',
-                'net_OH_usd',
+                'net_oh',
                 'pallet_quantity',
-                'item_poi_days',
+                # 'item_poi_days',
+                'legacy_customer_cd',
+                'core_item_flag',
+                'margin_%',
+                'net_oh_$',
                 'dioh']
 
         if all(x in keep[:5] for x in self.df.columns):
             return
 
         """ set input variables for input_page screen """
-        self.field_options = ['turn_and_earn', 'revenue_6mos'] + [x for x in self.df.columns if x in keep]
+        self.field_options = ['turn_and_earn', 'revenue_6mos', 'customers_per_product'] + [x for x in self.df.columns if x in keep]
 
         wh_options = self.df.legacy_division_cd.unique().astype(str)
 
@@ -65,15 +71,15 @@ class GUI:
         if self.segment_options is None:
             return
 
-        self.wh_var = StringVar(self.login, value='All')
-        self.segment_var = StringVar(self.login, value=self.segment_options[0])
-        self.cutoff_var = StringVar(self.login, value='20')
+        self.wh_var = StringVar(self.root, value='All')
+        self.segment_var = StringVar(self.root, value=self.segment_options[0])
+        self.cutoff_var = StringVar(self.root, value='20')
         self.field_var = []
 
         self.input_page()
 
     def input_page(self):
-        self.login.withdraw()
+        self.root.withdraw()
         define = Toplevel()
         self.define = define
         define.title("Define inputs")
@@ -97,10 +103,10 @@ class GUI:
 
         pad = len(max(self.field_options, key=len))
         for idx in range(len(self.field_options)):
-            if idx in [0, 1]:
-                var = IntVar(self.login, value=1)
+            if idx in [0, 1, 2]:
+                var = IntVar(self.root, value=1)
             else:
-                var = IntVar(self.login)
+                var = IntVar(self.root)
 
             txt = self.field_options[idx]
             b = Checkbutton(frame, text=txt + '  ' * (pad - len(txt)), variable=var, anchor="w")
@@ -133,7 +139,6 @@ class GUI:
         # if self.wh_var == 'All':
         #     self_wh_var = self.wh_options[1:]
 
-
     def output_page(self):
         self.define.withdraw()
         outputs = Toplevel()
@@ -141,16 +146,23 @@ class GUI:
         outputs.title("Outputs")
         outputs.config(bg="white")
         frame = Frame(outputs)
+        # self.outputs.geometry('500x500')
 
         """ RUN BACKEND """
-        model = vectorize.Vectorize(wh=self.wh_var,
-                                    segment=self.segment_var,
-                                    fields=self.field_var,
-                                    field_options=self.field_options,
-                                    cutoff=self.cutoff_var,
-                                    df=self.df)
+        model = Vectorize(wh=self.wh_var.get(),
+                          segment=self.segment_var,
+                          fields=self.field_var,
+                          field_options=self.field_options,
+                          cutoff=self.cutoff_var.get(),
+                          df=self.df,
+                          fname=self.fname)
 
-        label = Label(frame, text="Success!").grid(row=1, column=1)
+        label = Label(frame, text="Success!").grid(row=0, column=0, pady=10)
+        Button(frame, text="Download new Excel sheet", command=model.export).grid(row=1, column=0, pady=10)
+
+        text = Text(frame)
+        text.grid(row=2, column=0, pady=0)
+        text.insert(INSERT, model.string_output())
 
         frame.grid(row=2, column=2)
 
@@ -214,8 +226,11 @@ class GUI:
         #     self.df[column] = df2[column]
         #
         # self.df.fillna(0)
-        #
-        # self.df.to_excel('input_data/cleaned_input.xlsx')
+        self.df[continuous_labels] = self.df[continuous_labels].apply(self.get_max, axis=0)
+
+    def get_max(self, col):
+        return col / max(col)
+
 
 if __name__ == "__main__":
     GUI()
