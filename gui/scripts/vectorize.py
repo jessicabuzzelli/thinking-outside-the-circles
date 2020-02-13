@@ -43,22 +43,36 @@ def getdf(fname):
     return df
 
 
-class Vectorize:
+class WarehouseLevelVectors:
     def __init__(self, wh, segment, fields, field_options, cutoff, df, fname):
         self.fname = fname
-        try:
-            self.wh = [int(wh)]
-            df = df[df['legacy_division_cd'] == self.wh]
-        except TypeError:
-            self.wh = df['legacy_division_cd'].unique()
 
         self.segment = segment
+        self.df = df[df['segment'] == self.segment]
+
+        self.wh = wh
+        try:
+            self.wh = int(self.wh)
+        except TypeError:
+            pass
+
+        if isinstance(self.wh, int):
+            self.df = self.df[self.df['legacy_division_cd'] == wh]
+            self.wh = [int(self.wh)]
+        elif isinstance(self.wh, list):
+            for wh in self.wh:
+                self.df = self.df[self.df['legacy_division_cd'] == wh]
+        elif isinstance(self.wh, str):
+            if self.wh == 'All':
+                self.wh = self.df['legacy_division_cd'].unique()
+            else:
+                self.df = self.df[self.df['legacy_division_cd'] == wh]
+                self.wh = [int(self.wh)]
+
         self.field_options = field_options
         self.fields = fields
         self.cutoff = cutoff
         self.selected_fields = compress(self.field_options, [bool(x) for x in self.fields])
-
-        self.df = df[df['segment'] == self.segment]
 
         self.wh_to_prod = self.get_wh_to_prod()
 
@@ -221,13 +235,10 @@ class Vectorize:
             return 0
 
     def export(self):
-        series = self.df.applymap(self.iscore, axis=1)
-        print(series)
-        self.df['New Core Flag'] = series
+        self.df['New Core Flag'] = self.df.apply(self.iscore, axis=1)
         self.df.to_excel(str(self.fname.split('.')[0]) + '_newflags.xlsx')
 
     def iscore(self, row):
-        print(row)
         if self.wp_to_flag[row['legacy_division_cd'], row['legacy_product_cd']] == 0:
             return 'N'
         else:
@@ -235,7 +246,6 @@ class Vectorize:
 
     def string_output(self):
         core = []
-        # non core products
         non_core = []
 
         for wh in self.wh:
@@ -245,31 +255,38 @@ class Vectorize:
                 else:
                     core.append(p)
 
-        # Average profit
         core_avg_profit = []
         non_core_avg_profit = []
-        # Average turn and Earn
         core_avg_TE = []
         non_core_avg_TE = []
-        # Average number of customers
         core_avg_ncust = []
         non_core_avg_ncust = []
 
         for p in core:
-            core_avg_profit.append(self.wp_to_profit[self.wh, p])
-            core_avg_TE.append(self.wp_to_te[self.wh, p])
-            core_avg_ncust.append(self.wp_to_ncustomers[self.wh, p])
+            for w in self.wh:
+                try:
+                    core_avg_profit.append(self.wp_to_profit[w, p])
+                    core_avg_TE.append(self.wp_to_te[w, p])
+                    core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+                except KeyError:
+                    pass
+
         core_avg_profit = np.average(core_avg_profit)
         core_avg_TE = np.average(core_avg_TE)
         core_avg_ncust = np.average(core_avg_ncust)
 
         for p in non_core:
-            non_core_avg_profit.append(self.wp_to_profit[self.wh, p])
-            non_core_avg_TE.append(self.wp_to_te[self.wh, p])
-            non_core_avg_ncust.append(self.wp_to_ncustomers[self.wh, p])
-        non_core_avg_profit = np.average(non_core_avg_profit)
-        non_core_avg_TE = np.average(non_core_avg_TE)
-        non_core_avg_ncust = np.average(non_core_avg_ncust)
+            for w in self.wh:
+                try:
+                    non_core_avg_profit.append(self.wp_to_profit[w, p])
+                    non_core_avg_TE.append(self.wp_to_te[w, p])
+                    non_core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+                except KeyError:
+                    pass
+
+        non_core_avg_profit = np.round(np.average(non_core_avg_profit), 2)
+        non_core_avg_TE = np.round(np.average(non_core_avg_TE), 2)
+        non_core_avg_ncust = np.round(np.average(non_core_avg_ncust), 2)
 
         # Average profit
         avg_profit = []
@@ -282,9 +299,9 @@ class Vectorize:
                 avg_profit.append(self.wp_to_profit[wh, p])
                 avg_TE.append(self.wp_to_te[wh, p])
                 avg_ncust.append(self.wp_to_ncustomers[wh, p])
-        avg_profit = np.average(avg_profit)
-        avg_TE = np.average(avg_TE)
-        avg_ncust = np.average(avg_ncust)
+        avg_profit = np.round(np.average(avg_profit),2)
+        avg_TE = np.round(np.average(avg_TE),2)
+        avg_ncust = np.round(np.average(avg_ncust),2)
 
         inputs = [self.wh, self.n_core, core_avg_profit, core_avg_TE, core_avg_ncust]
         string = """For warehouse(s) {}:
@@ -305,6 +322,38 @@ class Vectorize:
         # print('All Items in warehouse average number of customers', avg_ncust)
         # print()
 
+
+class RegionLevelVectors:
+    def __init__(self, region, segment, fields, field_options, cutoff, df, fname):
+        pass
+
+    def export(self):
+        print('Exported!')
+
+    def string_output(self):
+        print('String output!')
+        return "This is the string!"
+
+
 if __name__ == '__main__':
-    m = Vectorize(19, 'Facility Solutions', [1, 1, 1], ['turn_and_earn', 'profit_6mos', 'cogs_6mos'], 20, getdf("../../data/Clean_Data.xlsx"))
-    m.export('../input_data/adjusted.xlsx')
+    m = WarehouseLevelVectors(wh=83,
+                              segment='Facility Solutions',
+                              fields=[1, 1, 1],
+                              field_options=['turn_and_earn', 'profit_6mos', 'cogs_6mos'],
+                              cutoff=20,
+                              df=getdf("../Clean_Data_short.xlsx"),
+                              fname="../Clean_Data_short.xlsx")
+
+    m.export()
+    # print(m.string_output())
+
+    m2 = WarehouseLevelVectors(wh='83',
+                              segment='Facility Solutions',
+                              fields=[1, 1, 1],
+                              field_options=['turn_and_earn', 'profit_6mos'],
+                              cutoff=20,
+                              df=getdf("../Clean_Data_short.xlsx"),
+                              fname="../Clean_Data_short.xlsx")
+
+    m2.export()
+    print(m2.string_output())
