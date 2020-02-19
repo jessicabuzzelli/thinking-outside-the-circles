@@ -1,9 +1,9 @@
 ### Dependencies:
 1. pandas
+1. numpy
 1. tkinter
-1. sklearn
 
-Will package with pyinstaller or similar to enforce/package dependencies. 
+Will package with pyinstaller or similar to enforce dependencies. 
 
 ### UI:
 ##### Upload Screen:
@@ -13,6 +13,13 @@ Will package with pyinstaller or similar to enforce/package dependencies.
 ![](graphics/file_uploader.png)
 
 ##### Inputs screen:
-![](graphics/inputs_screen.png)
+![](graphics/input_screen.png)
+
+##### Loading screen:
+![](graphics/loading_screen.png)
+
+##### Outputs screen:
+![](graphics/output_screen.png)
+
 - Can adapt input type / aesthetics as needed since still refining the model to work with new inputs.
 
