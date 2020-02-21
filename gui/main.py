@@ -11,6 +11,7 @@ class GUI:
 
     def home(self):
         self.root = Tk()
+        self.root.eval('tk::PlaceWindow %s center' % self.root.winfo_pathname(self.root.winfo_id()))
         self.root.title("Click UPLOAD to begin")
         self.root.config(bg="white")
 
@@ -34,6 +35,7 @@ class GUI:
 
         loading = Toplevel()
         self.loading = loading
+        self.root.eval('tk::PlaceWindow %s center' % self.loading.winfo_pathname(self.loading.winfo_id()))
         loading.title("Loading...")
         loading.config(bg="white")
         frame = Frame(loading)
@@ -56,16 +58,16 @@ class GUI:
                 self.input_page()
 
     def read_file(self):
-        ext = self.fname.split('.')[1]
-        if ext == 'xlsx':
+        self.ext = self.fname.split('.')[1]
+        if self.ext == 'xlsx':
             try:
                 self.df = pd.read_excel(self.fname, sheet_name='Sheet1')
             except:
                 self.df = pd.read_excel(self.fname)
-        elif ext == '.csv':
+        elif self.ext == '.csv':
             self.df = pd.read_csv(self.fname)
         else:
-            return 'File extension not valid. Select another file.'
+            return 'Fileself.extension not valid. Select another file.'
 
         self.df.columns = [c.replace(' ', '_').lower() for c in self.df.columns]
 
@@ -133,6 +135,7 @@ class GUI:
 
         define = Toplevel()
         self.define = define
+        self.root.eval('tk::PlaceWindow %s center' % self.define.winfo_pathname(self.define.winfo_id()))
         define.title("Define inputs")
         define.config(bg="white")
         frame = Frame(define)
@@ -239,8 +242,11 @@ class GUI:
             self.model = RegionLevelVectors(region_var, *params)
 
     def loading_page2(self):
+        self.define.withdraw()
+
         loading2 = Toplevel()
         self.loading2 = loading2
+        self.root.eval('tk::PlaceWindow %s center' % self.loading2.winfo_pathname(self.loading2.winfo_id()))
         loading2.title("Loading...")
         loading2.config(bg="white")
         frame = Frame(loading2)
@@ -260,6 +266,7 @@ class GUI:
 
         outputs = Toplevel()
         self.outputs = outputs
+        self.root.eval('tk::PlaceWindow %s center' % self.outputs.winfo_pathname(self.outputs.winfo_id()))
         outputs.title("Outputs")
         outputs.config(bg="white")
         frame = Frame(outputs)
@@ -268,7 +275,7 @@ class GUI:
         # print(self.field_var)
 
         Label(frame, text="Success!").grid(row=0, column=0, pady=10)
-        Button(frame, text="Export to Excel", command=self.model.export).grid(row=1, column=0, pady=10)
+        Button(frame, text="Export to Excel", command=self.export).grid(row=1, column=0, pady=10)
 
         text = Text(frame)
         text.grid(row=2, column=0, pady=0)
@@ -277,6 +284,19 @@ class GUI:
         frame.grid(row=2, column=2)
 
         outputs.mainloop()
+
+    def export(self):
+        from tkinter.filedialog import asksaveasfilename
+        newfname = self.fname.split('/')[-1][:-len(self.ext) - 1] + '_new_core'
+
+        fout = asksaveasfilename(initialdir=''.join(self.fname.split('/')[:-1]),
+                                 initialfile=newfname,
+                                 filetypes=[('Excel spreadsheet', '.xlsx')])
+
+        if fout is '':
+            return
+        else:
+            self.model.export(fout)
 
 
 if __name__ == "__main__":

@@ -39,35 +39,25 @@ def getdf(fname):
                          'dioh']
 
     df[continuous_labels] = df[continuous_labels][(df[continuous_labels] > 0)].fillna(0)
-    # print(df.shape[0])
+
     return df
 
 
 class WarehouseLevelVectors:
-    def __init__(self, wh, segment, fields, field_options, cutoff, df, fname):
+    def __init__(self, wh, segment, fields, field_options, cutoff, df, fname, scaled=False):
+        self.scaled = scaled
         self.fname = fname
 
         self.segment = segment
         self.df = df[df['segment'] == self.segment]
 
         self.wh = wh
-        try:
-            self.wh = int(self.wh)
-        except TypeError:
-            pass
+        for wh in self.df['legacy_division_cd'].unique():
+            if wh not in self.wh:
+                self.df = self.df[self.df['legacy_division_cd'] != wh]
 
-        if isinstance(self.wh, int):
-            self.df = self.df[self.df['legacy_division_cd'] == wh]
-            self.wh = [int(self.wh)]
-        elif isinstance(self.wh, list):
-            for wh in self.wh:
-                self.df = self.df[self.df['legacy_division_cd'] == wh]
-        elif isinstance(self.wh, str):
-            if self.wh == 'All':
-                self.wh = self.df['legacy_division_cd'].unique()
-            else:
-                self.df = self.df[self.df['legacy_division_cd'] == wh]
-                self.wh = [int(self.wh)]
+        self.maxes = self.df.max(axis=0).to_dict()
+        self.format_df()
 
         self.field_options = field_options
         self.fields = fields
@@ -76,21 +66,24 @@ class WarehouseLevelVectors:
 
         self.wh_to_prod = self.get_wh_to_prod()
 
-        self.wp_to_sales, \
-        self.wp_to_costs, \
-        self.wp_to_picks, \
-        self.wp_to_quantity, \
-        self.wp_to_ncustomers, \
-        self.wp_to_pallet, \
-        self.wp_to_margin, \
-        self.wp_to_coreflag, \
-        self.wp_to_oh,\
-        self.wp_to_te,\
-        self.wp_to_profit = self.get_mappings()
+    def format_df(self):
+        self.continuous_labels = ['sales_6_mos',
+                             'qty_6mos',
+                             'cogs_6mos',
+                             # 'margin_%',
+                             'picks_6mos',
+                             'net_oh',
+                             'net_oh_$',
+                             'dioh']
 
-        self.vecs, self.wp_to_vector = self.get_vectors()
+        self.df[self.continuous_labels] = self.df[self.continuous_labels][(self.df[self.continuous_labels] > 0)].fillna(0)
 
-        self.wp_to_flag = self.get_flags()
+        if self.scaled:
+            self.df[self.continuous_labels] = self.df[self.continuous_labels].apply(self.get_max, axis=0)
+            # self.df.to_excel('../input_data/masked.xlsx')
+
+    def get_max(self, col):
+        return col / self.maxes[col.name]
 
     def get_wh_to_prod(self):
         wh_to_prod = {}
@@ -177,31 +170,51 @@ class WarehouseLevelVectors:
                     wp_to_te[w, p] = wp_to_margin[w, p] * wp_to_costs[w, p] / wp_to_oh[w, p]
                 wp_to_profit[w, p] = wp_to_sales[w, p] - wp_to_costs[w, p]
 
-        return wp_to_sales, \
-               wp_to_costs, \
-               wp_to_picks, \
-               wp_to_quantity, \
-               wp_to_ncustomers, \
-               wp_to_pallet, \
-               wp_to_margin, \
-               wp_to_coreflag, \
-               wp_to_oh, \
-               wp_to_te, \
-               wp_to_profit
+        self.maxes['turn_and_earn'] = wp_to_te[max(wp_to_te, key=wp_to_te.get)]
+        self.maxes['profit_6mos'] = wp_to_profit[max(wp_to_profit, key=wp_to_profit.get)]
+        self.maxes['customers_per_product'] = wp_to_ncustomers[max(wp_to_ncustomers, key=wp_to_ncustomers.get)]
+
+        self.wp_to_sales = wp_to_sales
+        self.wp_to_costs = wp_to_costs
+        self.wp_to_picks = wp_to_picks
+        self.wp_to_quantity = wp_to_quantity
+        self.wp_to_ncustomers = wp_to_ncustomers
+        self.wp_to_pallet = wp_to_pallet
+        self.wp_to_margin = wp_to_margin
+        self.wp_to_coreflag = wp_to_coreflag
+        self.wp_to_oh = wp_to_oh
+        self.wp_to_te = wp_to_te
+        self.wp_to_profit = wp_to_profit
 
     def get_vectors(self):
         vecs = []
         wp_to_vector = {}
 
+        var_dict = {'profit_6mos': self.wp_to_profit,
+                    "margin_%": self.wp_to_margin,
+                    'turn_and_earn': self.wp_to_te,
+                    'customers_per_product': self.wp_to_ncustomers,
+                    'sales_6_mos': self.wp_to_sales,
+                    'cogs_6mos': self.wp_to_costs,
+                    'qty_6mos': self.wp_to_quantity,
+                    'picks_6mos': self.wp_to_picks,
+                    'net_oh': self.wp_to_oh}
+
         for w in self.wh:
             for p in self.wh_to_prod[w]:
-                vec = [self.wp_to_te[w, p], self.wp_to_profit[w, p], self.wp_to_ncustomers[w, p]]
-                vec = np.linalg.norm(vec)
-                # vec = self.norm(vec)
+                vec = []
+                for key in self.selected_fields:
+                    if key in self.continuous_labels:
+                        vec.append(var_dict[key][w, p] / self.maxes[key])
+                    else:
+                        vec.append(var_dict[key][w, p])
+                # vec = [self.wp_to_te[w, p], self.wp_to_profit[w, p], self.wp_to_ncustomers[w, p]]
+                # vec = np.linalg.norm(vec)
+                vec = self.norm(vec)
                 wp_to_vector[w, p] = vec
                 vecs.append(vec)
 
-        return vecs, wp_to_vector
+        self.vecs, self.wp_to_vector = vecs, wp_to_vector
 
     def get_flags(self):
         wp_to_flag = {}
@@ -224,19 +237,19 @@ class WarehouseLevelVectors:
             for p in core_prods:
                 wp_to_flag[w, p] = 1
 
-        return wp_to_flag
+        self.wp_to_flag = wp_to_flag
 
     def norm(self, vec):
         vec = np.array(vec)
         length = len(vec)
         try:
-            return sum(vec ** length) ** (1 / length)
+            return sum(np.sign(vec) * (np.abs(vec) ** length)) ** (1 / length)
         except ZeroDivisionError:
             return 0
 
-    def export(self):
+    def export(self, fout):
         self.df['New Core Flag'] = self.df.apply(self.iscore, axis=1)
-        self.df.to_excel(str(self.fname.split('.')[0]) + '_newflags.xlsx')
+        self.df.to_excel(fout)
 
     def iscore(self, row):
         if self.wp_to_flag[row['legacy_division_cd'], row['legacy_product_cd']] == 0:
@@ -288,11 +301,8 @@ class WarehouseLevelVectors:
         non_core_avg_TE = np.round(np.average(non_core_avg_TE), 2)
         non_core_avg_ncust = np.round(np.average(non_core_avg_ncust), 2)
 
-        # Average profit
         avg_profit = []
-        # Average TE
         avg_TE = []
-        # Average number of customers
         avg_ncust = []
         for wh in self.wh:
             for p in self.wh_to_prod[wh]:
@@ -303,24 +313,41 @@ class WarehouseLevelVectors:
         avg_TE = np.round(np.average(avg_TE),2)
         avg_ncust = np.round(np.average(avg_ncust),2)
 
-        inputs = [self.wh, self.n_core, core_avg_profit, core_avg_TE, core_avg_ncust]
+        inputs = [self.wh,
+                  self.n_core,
+                  core_avg_profit,
+                  core_avg_TE,
+                  core_avg_ncust,
+                  len(non_core),
+                  non_core_avg_profit,
+                  non_core_avg_TE,
+                  non_core_avg_ncust,
+                  avg_ncust,
+                  avg_TE,
+                  avg_ncust]
+
         string = """For warehouse(s) {}:
-        Number of core items: {}
-        Core items average profit: {}
-        Core items average turn and earn: {}
-        Core items average number of customers: {}""".format(*inputs)
+        
+            Number of core items: {}
+            Core items average profit: {}
+            Core items average turn and earn: {}
+            Core items average number of customers: {}
+            
+            Number of non core items: {}
+            Non Core Items Average Profit: {}
+            Non Core Items Average TE: {}
+            Non Core Items Average number of customers: {}
+            
+            All Items in warehouse average profit: {}
+            All Items in warehouse average TE: {}
+            All Items in warehouse average number of customers: {}""".format(*inputs)
 
         return string
-        #
-        # print("Number of non core items", len(non_core))
-        # print("Non Core Items Average Profit", non_core_avg_profit)
-        # print('Non Core Items Average TE', non_core_avg_TE)
-        # print("Non Core Items Average number of customers", non_core_avg_ncust)
-        # print()
-        # print('All Items in warehouse average profit', avg_profit)
-        # print('All Items in warehouse average TE', avg_TE)
-        # print('All Items in warehouse average number of customers', avg_ncust)
-        # print()
+
+    def run(self):
+        self.get_mappings()
+        self.get_vectors()
+        self.get_flags()
 
 
 class RegionLevelVectors:
@@ -334,26 +361,21 @@ class RegionLevelVectors:
         print('String output!')
         return "This is the string!"
 
+    def run(self):
+        pass
+
 
 if __name__ == '__main__':
-    m = WarehouseLevelVectors(wh=83,
+    m = WarehouseLevelVectors(wh=[19],
                               segment='Facility Solutions',
                               fields=[1, 1, 1],
                               field_options=['turn_and_earn', 'profit_6mos', 'cogs_6mos'],
                               cutoff=20,
-                              df=getdf("../Clean_Data_short.xlsx"),
-                              fname="../Clean_Data_short.xlsx")
+                              df=getdf("../../data/Clean_Data_short.xlsx"),
+                              fname="../../data/Clean_Data.xlsx")
 
-    m.export()
-    # print(m.string_output())
-
-    m2 = WarehouseLevelVectors(wh='83',
-                              segment='Facility Solutions',
-                              fields=[1, 1, 1],
-                              field_options=['turn_and_earn', 'profit_6mos'],
-                              cutoff=20,
-                              df=getdf("../Clean_Data_short.xlsx"),
-                              fname="../Clean_Data_short.xlsx")
-
-    m2.export()
-    print(m2.string_output())
+    m.run()
+    print(m.string_output())
+    # m.export()
+    # print(m.wp_to_vector)
+    # print(m.wp_to_coreflag)
