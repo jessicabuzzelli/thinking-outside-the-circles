@@ -393,7 +393,7 @@ class RegionLevelVectors:
     def get_max(self, col):
         return col / self.maxes[col.name]
 
-    def get_wh_to_prod(self):
+    def get_region_to_prod(self):
         region_to_prod = {}
 
         for region in self.region:
@@ -509,7 +509,7 @@ class RegionLevelVectors:
                     'net_oh': self.r_to_oh}
 
         for w in self.region:
-            for p in self.r_to_prod[w]:
+            for p in self.region_to_prod[w]:
                 vec = []
                 for key in self.selected_fields:
                     if key in self.continuous_labels:
@@ -529,7 +529,7 @@ class RegionLevelVectors:
 
         for w in self.region:
             prod_to_score = {}
-            for p in self.r_to_prod[w]:
+            for p in self.region_to_prod[w]:
                 prod_to_score[p] = self.r_to_vector[w, p]
 
             prods_by_score = sorted(prod_to_score, key=prod_to_score.__getitem__)
@@ -570,7 +570,7 @@ class RegionLevelVectors:
         non_core = []
 
         for wh in self.region:
-            for p in self.r_to_prod[wh]:
+            for p in self.region_to_prod[wh]:
                 if self.r_to_flag[wh, p] == 0:
                     non_core.append(p)
                 else:
@@ -613,7 +613,7 @@ class RegionLevelVectors:
         avg_TE = []
         avg_ncust = []
         for wh in self.region:
-            for p in self.r_to_prod[wh]:
+            for p in self.region_to_prod[wh]:
                 avg_profit.append(self.r_to_profit[wh, p])
                 avg_TE.append(self.r_to_te[wh, p])
                 avg_ncust.append(self.r_to_ncustomers[wh, p])
