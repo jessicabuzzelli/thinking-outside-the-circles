@@ -320,7 +320,11 @@ class RegionLevelVectors:
         self.segment = segment
         self.df = df[df['segment'] == self.segment]
 
-        self.region = region
+        if region == 'All':
+            self.region = self.df['legacy_system_cd'].unique()
+        else:
+            self.region = [region]
+
         for region in self.df['legacy_system_cd'].unique():
             if region not in self.region:
                 self.df = self.df[self.df['legacy_system_cd'] != region]
@@ -433,7 +437,7 @@ class RegionLevelVectors:
         r_to_te = {}
         r_to_profit = {}
         for r in self.region:
-            for p in self.region_to_prod[w]:
+            for p in self.region_to_prod[r]:
                 if r_to_oh[r, p] == 0:
                     r_to_te[r, p] = 0
                 else:
@@ -499,8 +503,8 @@ class RegionLevelVectors:
             cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
             self.n_core = cutoffIdx
 
-            non_core_prods = prods_by_score[:cutoffIdx]
-            core_prods = prods_by_score[cutoffIdx:]
+            non_core_prods = prods_by_score[cutoffIdx:]
+            core_prods = prods_by_score[:cutoffIdx]
 
             for p in non_core_prods:
                 r_to_flag[w, p] = 0
