@@ -429,7 +429,7 @@ class RegionLevelVectors:
                 'net_oh']
 
         for r, p, s, c, pk, q, cust, oh in self.df[cols].values:
-            if p in self.region_to_prod[w]:
+            if p in self.region_to_prod[r]:
                 r_to_sales[r, p].append(s)
                 r_to_costs[r, p].append(c)
                 r_to_picks[r, p].append(pk)
