@@ -359,6 +359,9 @@ class RegionLevelVectors:
         self.df = df[df['segment'] == self.segment]
 
         self.region = region
+        if self.region == 'All':
+            self.region = self.df['legacy_system_cd'].unique()
+
         for region in self.df['legacy_system_cd'].unique():
             if region not in self.region:
                 self.df = self.df[self.df['legacy_system_cd'] != region]
