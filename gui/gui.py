@@ -132,6 +132,7 @@ class GUI:
         self.weight_var = []
         self.region_var = StringVar(self.root, value='All')
         self.level_var = StringVar(self.root, value='warehouse')
+        self.objective = StringVar(self.root, value='Identify core products')
 
     def input_page(self):
         self.loading.withdraw()
@@ -150,12 +151,14 @@ class GUI:
         Label(frame, text="Select segment: ").grid(row=1, column=0, pady=10)
         OptionMenu(frame, self.segment_var, *self.segment_options).grid(row=1, column=1, pady=10)
 
-        Label(frame, text="Select scope and press REFRESH: ").grid(row=2, column=0, pady=10)
+        Label(frame, text="Select scope level and press REFRESH: ").grid(row=2, column=0, pady=10)
         OptionMenu(frame, self.level_var, *self.level_options).grid(row=2, column=1, pady=10)
         Button(frame, text='REFRESH', command=self.popup_level_options).grid(row=2, column=2, pady=10)
 
-        Label(frame, text=" % core products: ").grid(row=3, column=0, pady=10)
-        Entry(frame, textvariable=self.cutoff_var).grid(row=3, column=1, pady=10)
+        Label(frame, text="Select model goal: ").grid(row=3, column=0, pady=10)
+        OptionMenu(frame, self.objective, 'Identify core products', 'Identify products to remove').grid(row=3, column=1, pady=10)
+        Label(frame, text="Set % to identify: ").grid(row=3, column=2, pady=10)
+        Entry(frame, textvariable=self.cutoff_var).grid(row=3, column=3, pady=10)
 
         Label(frame, text="Select field(s) to consider and enter weights: ").grid(row=4, column=0, pady=10)
 
@@ -249,6 +252,7 @@ class GUI:
         wh_var = self.wh_var.get()
         region_var = self.region_var.get()
         level_var = self.level_var.get()
+        obj_var = self.objective.get()
 
         try:
             wh_var = [int(x) for x in wh_var]
@@ -264,7 +268,7 @@ class GUI:
             assert region_var == 'All'
             region_var = self.df['legacy_system_cd'].unique()
 
-        params = [segment_var, field_var, self.field_options, self.cutoff, self.weights, self.df, self.fname]
+        params = [obj_var, segment_var, field_var, self.field_options, self.cutoff, self.weights, self.df, self.fname]
 
         if level_var == 'warehouse':
             self.model = Vectorize(level_var, wh_var, *params)

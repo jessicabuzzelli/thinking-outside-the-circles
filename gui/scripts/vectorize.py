@@ -44,8 +44,18 @@ def getdf(fname):
 
 
 class Vectorize:
-    def __init__(self, level, selections, segment, fields, field_options, cutoff, weights, df, fname):
+    def __init__(self, level, selections, objective, segment, fields, field_options, cutoff, weights, df, fname):
+        self.continuous_labels = ['sales_6_mos',
+                                  'qty_6mos',
+                                  'cogs_6mos',
+                                  # 'margin_%',
+                                  'picks_6mos',
+                                  'net_oh',
+                                  'net_oh_$',
+                                  'dioh']
+
         self.fname = fname
+        self.objective = objective
 
         self.segment = segment
         self.df = df[df['segment'] == self.segment]
@@ -65,7 +75,7 @@ class Vectorize:
         self.maxes = self.df.max(axis=0).to_dict()
         self.mins = self.df.min(axis=0).to_dict()
 
-        self.format_df()
+        # self.format_df()
 
         self.field_options = field_options
         self.fields = fields
@@ -76,15 +86,15 @@ class Vectorize:
 
         self.selections_to_prod = self.get_selections_to_prod()
 
-    def format_df(self):
-        self.continuous_labels = ['sales_6_mos',
-                                  'qty_6mos',
-                                  'cogs_6mos',
-                                  # 'margin_%',
-                                  'picks_6mos',
-                                  'net_oh',
-                                  'net_oh_$',
-                                  'dioh']
+    # def format_df(self):
+    #     self.continuous_labels = ['sales_6_mos',
+    #                               'qty_6mos',
+    #                               'cogs_6mos',
+    #                               # 'margin_%',
+    #                               'picks_6mos',
+    #                               'net_oh',
+    #                               'net_oh_$',
+    #                               'dioh']
 
         # self.df[self.continuous_labels] = self.df[self.continuous_labels][(self.df[self.continuous_labels] > 0)].fillna(
         #     0)
@@ -253,13 +263,23 @@ class Vectorize:
             cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
             self.n_core = cutoffIdx
 
-            non_core_prods = prods_by_score[:cutoffIdx]
-            core_prods = prods_by_score[cutoffIdx:]
+            if self.objective == 'Identify core products':
+                extras = prods_by_score[:cutoffIdx]
+                target = prods_by_score[cutoffIdx:]
+                self.targetname = 'Core'
+                self.extraname = 'Non-Core'
 
-            for p in non_core_prods:
+            else:
+                assert self.objective == 'Identify products to remove'
+                target = prods_by_score[cutoffIdx:]
+                extras = prods_by_score[:cutoffIdx]
+                self.targetname = 'removed'
+                self.extraname = 'kept'
+
+            for p in extras:
                 wp_to_flag[w, p] = 0
 
-            for p in core_prods:
+            for p in target:
                 wp_to_flag[w, p] = 1
 
         self.wp_to_flag = wp_to_flag
@@ -289,88 +309,91 @@ class Vectorize:
             return 'Y'
 
     def string_output(self):
-        core = []
-        non_core = []
+        target = []
+        extras = []
 
         for selections in self.selections:
             for p in self.selections_to_prod[selections]:
                 if self.wp_to_flag[selections, p] == 0:
-                    non_core.append(p)
+                    extras.append(p)
                 else:
-                    core.append(p)
+                    target.append(p)
 
-        core_avg_profit = []
-        non_core_avg_profit = []
-        core_avg_TE = []
-        non_core_avg_TE = []
-        core_avg_ncust = []
-        non_core_avg_ncust = []
+        target_avg_profit = []
+        extras_avg_profit = []
+        target_avg_turn = []
+        extras_avg_turn = []
+        target_avg_ncust = []
+        extras_avg_ncust = []
 
-        for p in core:
+        for p in target:
             for w in self.selections:
                 try:
-                    core_avg_profit.append(self.wp_to_profit[w, p])
-                    core_avg_TE.append(self.wp_to_turn[w, p])
-                    core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+                    target_avg_profit.append(self.wp_to_profit[w, p])
+                    target_avg_turn.append(self.wp_to_turn[w, p])
+                    target_avg_ncust.append(self.wp_to_ncustomers[w, p])
 
                 except KeyError:
                     pass
 
-        core_avg_profit = np.average(core_avg_profit)
-        core_avg_TE = np.average(core_avg_TE)
-        core_avg_ncust = np.average(core_avg_ncust)
+        target_avg_profit = np.average(target_avg_profit)
+        target_avg_turn = np.average(target_avg_turn)
+        target_avg_ncust = np.average(target_avg_ncust)
 
-        for p in non_core:
+        for p in extras:
             for w in self.selections:
                 try:
-                    non_core_avg_profit.append(self.wp_to_profit[w, p])
-                    non_core_avg_TE.append(self.wp_to_turn[w, p])
-                    non_core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+                    extras_avg_profit.append(self.wp_to_profit[w, p])
+                    extras_avg_turn.append(self.wp_to_turn[w, p])
+                    extras_avg_ncust.append(self.wp_to_ncustomers[w, p])
 
                 except KeyError:
                     pass
 
-        non_core_avg_profit = np.round(np.average(non_core_avg_profit), 2)
-        non_core_avg_TE = np.round(np.average(non_core_avg_TE), 2)
-        non_core_avg_ncust = np.round(np.average(non_core_avg_ncust), 2)
+        extras_avg_profit = np.round(np.average(extras_avg_profit), 2)
+        extras_avg_turn = np.round(np.average(extras_avg_turn), 2)
+        extras_avg_ncust = np.round(np.average(extras_avg_ncust), 2)
 
         avg_profit = []
-        avg_TE = []
+        avg_turn = []
         avg_ncust = []
         for selections in self.selections:
             for p in self.selections_to_prod[selections]:
                 avg_profit.append(self.wp_to_profit[selections, p])
-                avg_TE.append(self.wp_to_turn[selections, p])
+                avg_turn.append(self.wp_to_turn[selections, p])
                 avg_ncust.append(self.wp_to_ncustomers[selections, p])
+
         avg_profit = np.round(np.average(avg_profit), 2)
-        avg_TE = np.round(np.average(avg_TE), 2)
+        avg_turn = np.round(np.average(avg_turn), 2)
         avg_ncust = np.round(np.average(avg_ncust), 2)
 
         inputs = [self.levelinput,
                   self.selections,
-                  len(core),
-                  core_avg_profit,
-                  core_avg_TE,
-                  core_avg_ncust,
-                  len(non_core),
-                  non_core_avg_profit,
-                  non_core_avg_TE,
-                  non_core_avg_ncust,
+                  self.targetname,
+                  len(target),
+                  target_avg_profit,
+                  target_avg_turn,
+                  target_avg_ncust,
+                  self.extraname,
+                  len(extras),
+                  extras_avg_profit,
+                  extras_avg_turn,
+                  extras_avg_ncust,
                   self.levelinput,
                   avg_profit,
                   self.levelinput,
-                  avg_TE,
+                  avg_turn,
                   self.levelinput,
                   avg_ncust]
 
         string = """For {}(s) {}:
 
-            Number of core items: {}
+            Number of {} items: {}
             Core items average profit: {}
             Core items average turn: {}
             Core items average number of customers: {}
 
-            Number of non core items: {}
+            Number of {} items: {}
             Non Core items average profit: {}
             Non Core items average turn: {}
             Non Core items average number of customers: {}
