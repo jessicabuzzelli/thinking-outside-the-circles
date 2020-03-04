@@ -230,7 +230,7 @@ class Vectorize:
                         # scales here by adding most negative value, dividing by most positive number
                         # negative numbers were NOT previuosly filtered out and dictionary values are the actual values
                         # vector and vectorscore ONLY will reflect scaled values -- can use dictionary values for output
-                        vec.append((var_dict[key][w, p] + self.mins[key]) / self.maxes[key])
+                        vec.append((var_dict[key][w, p] + np.absolute(self.mins[key])) / (self.maxes[key]-self.mins[key])) 
                     else:
                         vec.append(var_dict[key][w, p])
 
@@ -346,7 +346,13 @@ class Vectorize:
         avg_TE = np.round(np.average(avg_TE), 2)
         avg_ncust = np.round(np.average(avg_ncust), 2)
 
-        inputs = [self.selections,
+        if self.level == 'legacy_division_cd':
+            level = 'warehouse'
+        elif self.level == 'legacy_system_cd':
+            level = 'region'
+
+        inputs = [level,
+                self.selections,
                   len(core),
                   core_avg_profit,
                   core_avg_TE,
@@ -359,23 +365,24 @@ class Vectorize:
                   avg_TE,
                   avg_ncust]
 
-        string = """For warehouse(s) {}:
+        string_output = """For {}(s) {}:
 
             Number of core items: {}
             Core items average profit: {}
-            Core items average Turn: {}
+            Core items average turnover: {}
             Core items average number of customers: {}
 
             Number of non core items: {}
             Non Core Items Average Profit: {}
-            Non Core Items Average Turn: {}
+            Non Core Items Average turnover: {}
             Non Core Items Average number of customers: {}
 
             All Items in warehouse average profit: {}
             All Items in warehouse average Turn: {}
             All Items in warehouse average number of customers: {}""".format(*inputs)
-
-        return string
+        
+        return string_output
+        
 
     def run(self):
         self.get_mappings()
