@@ -1,8 +1,8 @@
 from tkinter import *
 import pandas as pd
 import numpy as np
-from gui.scripts.vectorize import WarehouseLevelVectors, RegionLevelVectors
-# TODO - add weighting option
+from gui.scripts.vectorize import WarehouseLevelVectors
+
 # TODO - add override option for reccomeding products to cut
 
 
@@ -144,7 +144,6 @@ class GUI:
         frame = Frame(define)
         self.input_frame = frame
 
-        # TODO - incorporate way to get overall Core/Noncore override param
         Label(frame, text="Modify model inputs below and click RUN. ").grid(row=0, column=1, pady=10)
         Button(frame, text="RUN", width=8, command=self.check_inputs).grid(row=0, column=2, pady=10)
 
@@ -160,7 +159,6 @@ class GUI:
 
         Label(frame, text="Select field(s) to consider and enter weights: ").grid(row=4, column=0, pady=10)
 
-        pad = len(max(self.field_options, key=len))
         for idx in range(len(self.field_options)):
             if idx in [0, 1, 2]:
                 var = IntVar(self.root, value=1)
@@ -259,13 +257,20 @@ class GUI:
             assert wh_var == 'All'
             wh_var = self.df['legacy_division_cd'].unique()
 
+        try:
+            region_var = [int(region_var)]
+
+        except ValueError:
+            assert region_var == 'All'
+            region_var = self.df['legacy_system_cd'].unique()
+
         params = [segment_var, field_var, self.field_options, self.cutoff, self.weights, self.df, self.fname]
 
         if level_var == 'warehouse':
             self.model = WarehouseLevelVectors(level_var, wh_var, *params)
 
         elif level_var == 'region':
-            self.model = RegionLevelVectors(level_var, region_var, *params)
+            self.model = WarehouseLevelVectors(level_var, region_var, *params)
 
     def loading_page2(self):
         self.define.withdraw()
