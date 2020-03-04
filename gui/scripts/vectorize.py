@@ -50,6 +50,7 @@ class Vectorize:
         self.segment = segment
         self.df = df[df['segment'] == self.segment]
 
+        self.levelinput = level
         if level == 'warehouse':
             self.level = 'legacy_division_cd'
         elif level == 'region':
@@ -61,7 +62,6 @@ class Vectorize:
             if option not in self.selections:
                 self.df = self.df[self.df[self.level] != option]
 
-        print(self.df)
         self.maxes = self.df.max(axis=0).to_dict()
         self.mins = self.df.min(axis=0).to_dict()
 
@@ -230,7 +230,7 @@ class Vectorize:
                         # scales here by adding most negative value, dividing by most positive number
                         # negative numbers were NOT previuosly filtered out and dictionary values are the actual values
                         # vector and vectorscore ONLY will reflect scaled values -- can use dictionary values for output
-                        vec.append((var_dict[key][w, p] + self.mins[key]) / self.maxes[key])
+                        vec.append((var_dict[key][w, p] + abs(self.mins[key])) / self.maxes[key])
                     else:
                         vec.append(var_dict[key][w, p])
 
@@ -346,7 +346,8 @@ class Vectorize:
         avg_TE = np.round(np.average(avg_TE), 2)
         avg_ncust = np.round(np.average(avg_ncust), 2)
 
-        inputs = [self.selections,
+        inputs = [self.levelinput,
+                  self.selections,
                   len(core),
                   core_avg_profit,
                   core_avg_TE,
@@ -355,25 +356,28 @@ class Vectorize:
                   non_core_avg_profit,
                   non_core_avg_TE,
                   non_core_avg_ncust,
+                  self.levelinput,
                   avg_profit,
+                  self.levelinput,
                   avg_TE,
+                  self.levelinput,
                   avg_ncust]
 
-        string = """For warehouse(s) {}:
+        string = """For {}(s) {}:
 
             Number of core items: {}
             Core items average profit: {}
-            Core items average Turn: {}
+            Core items average turn: {}
             Core items average number of customers: {}
 
             Number of non core items: {}
-            Non Core Items Average Profit: {}
-            Non Core Items Average Turn: {}
-            Non Core Items Average number of customers: {}
+            Non Core items average profit: {}
+            Non Core items average turn: {}
+            Non Core items average number of customers: {}
 
-            All Items in warehouse average profit: {}
-            All Items in warehouse average Turn: {}
-            All Items in warehouse average number of customers: {}""".format(*inputs)
+            All items in {}(s) average profit: {}
+            All items in {}(s) average turn: {}
+            All items in {}(s) average number of customers: {}""".format(*inputs)
 
         return string
 
