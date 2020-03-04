@@ -1,7 +1,7 @@
 from tkinter import *
 import pandas as pd
 import numpy as np
-from gui.scripts.vectorize import WarehouseLevelVectors
+from scripts.vectorize import Vectorize
 
 # TODO - add override option for reccomeding products to cut
 
@@ -101,8 +101,8 @@ class GUI:
                    'cogs_6mos',
                    'qty_6mos',
                    'picks_6mos',
-                   'net_oh',
-                   'pallet_quantity',
+                   'net_oh_$_6mos',
+                   # 'pallet_quantity',
                    'margin_%']
 
         self.field_options = ['turn_6mos', 'profit_6mos', 'customers_per_product'] + \
@@ -251,14 +251,14 @@ class GUI:
         level_var = self.level_var.get()
 
         try:
-            wh_var = [int(wh_var)]
+            wh_var = [int(x) for x in wh_var]
 
         except ValueError:
             assert wh_var == 'All'
             wh_var = self.df['legacy_division_cd'].unique()
 
         try:
-            region_var = [int(region_var)]
+            region_var = [int(x) for x in region_var]
 
         except ValueError:
             assert region_var == 'All'
@@ -267,10 +267,10 @@ class GUI:
         params = [segment_var, field_var, self.field_options, self.cutoff, self.weights, self.df, self.fname]
 
         if level_var == 'warehouse':
-            self.model = WarehouseLevelVectors(level_var, wh_var, *params)
+            self.model = Vectorize(level_var, wh_var, *params)
 
         elif level_var == 'region':
-            self.model = WarehouseLevelVectors(level_var, region_var, *params)
+            self.model = Vectorize(level_var, region_var, *params)
 
     def loading_page2(self):
         self.define.withdraw()
@@ -301,9 +301,6 @@ class GUI:
         outputs.title("Outputs")
         outputs.config(bg="white")
         frame = Frame(outputs)
-
-        # print(self.field_options)
-        # print(self.field_var)
 
         Label(frame, text="Success!").grid(row=0, column=0, pady=10)
         Button(frame, text="Export to Excel", command=self.export).grid(row=1, column=0, pady=10)
