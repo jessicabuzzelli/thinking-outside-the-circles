@@ -5,6 +5,7 @@ from gui.scripts.vectorize import WarehouseLevelVectors, RegionLevelVectors
 # TODO - add weighting option
 # TODO - add override option for reccomeding products to cut
 
+
 class GUI:
 
     def __init__(self):
@@ -128,6 +129,7 @@ class GUI:
         self.segment_var = StringVar(self.root, value=self.segment_options[0])
         self.cutoff_var = StringVar(self.root, value='20')
         self.field_var = []
+        self.weight_var = []
         self.region_var = StringVar(self.root, value='All')
         self.level_var = StringVar(self.root, value='warehouse')
 
@@ -151,32 +153,39 @@ class GUI:
 
         Label(frame, text="Select scope and press REFRESH: ").grid(row=2, column=0, pady=10)
         OptionMenu(frame, self.level_var, *self.level_options).grid(row=2, column=1, pady=10)
-        Button(frame, text='REFRESH', command=self.popup_options).grid(row=2, column=2, pady=10)
+        Button(frame, text='REFRESH', command=self.popup_level_options).grid(row=2, column=2, pady=10)
 
         Label(frame, text=" % core products: ").grid(row=3, column=0, pady=10)
         Entry(frame, textvariable=self.cutoff_var).grid(row=3, column=1, pady=10)
 
-        Label(frame, text="Field(s) to consider: ").grid(row=4, column=0, pady=10)
+        Label(frame, text="Select field(s) to consider and enter weights: ").grid(row=4, column=0, pady=10)
 
         pad = len(max(self.field_options, key=len))
         for idx in range(len(self.field_options)):
             if idx in [0, 1, 2]:
                 var = IntVar(self.root, value=1)
+                weightvar = StringVar(self.root, value=33.33)
             else:
                 var = IntVar(self.root)
+                weightvar = IntVar(self.root, value=0)
+
+            self.field_var.append(var)
+            self.weight_var.append(weightvar)
 
             txt = self.field_options[idx]
-            b = Checkbutton(frame, text=txt + '  ' * (pad - len(txt)), variable=var, anchor="w")
-            b.grid(row=4 + (idx // 2), column=(idx % 2) + 1, pady=10)
-            self.field_var.append(var)
 
-        self.last_row = 3 + (len(self.field_options) // 2)
+            Checkbutton(frame, text=txt, variable=self.field_var[idx], justify=LEFT, anchor="w")\
+                .grid(row=4 + idx, column=1, pady=10)
+
+            Entry(frame, text=self.weight_var[idx].get(), textvariable=self.weight_var[idx]).grid(row=4 + idx, column=2, pady=10, padx=10)
+
+        self.last_row = 4 + len(self.field_options)
 
         frame.grid(row=4, column=len(self.field_options))
 
         define.mainloop()
 
-    def popup_options(self):
+    def popup_level_options(self):
         try:
             self.wh_label.destroy()
             self.wh_optionmenu.destroy()
@@ -191,7 +200,7 @@ class GUI:
 
         if self.level_var.get() == 'warehouse':
             self.wh_label = Label(self.input_frame, text="Select warehouse(s): ")
-            self.wh_label.grid(row=2, column=3, pady=10)
+            self.wh_label.grid(row=2, column=3, pady=10, padx=10)
             self.wh_optionmenu = OptionMenu(self.input_frame, self.wh_var, *self.wh_options)
             self.wh_optionmenu.grid(row=2, column=4, pady=10)
 
@@ -202,16 +211,33 @@ class GUI:
             self.region_optionmenu.grid(row=2, column=4, pady=10)
 
     def check_inputs(self):
-        err = False
         try:
-            float(self.cutoff_var.get())
+            self.ErrorLabel.destroy()
+
+        except AttributeError:
+            pass
+
+        err = ''
+
+        try:
+            self.cutoff = float(self.cutoff_var.get())
 
         except ValueError:
-            err = True
+            err = 'ERROR. Enter a numeric value for % core products.'
+
+        try:
+            self.weights = [float(w.get()) for w in self.weight_var]
+            total = sum(self.weights)
+            assert 99 <= total <= 101
+
+        except TclError:
+            err = 'ERROR. Enter a numeric value for each of the field weights.'
+
+        except AssertionError:
+            err = 'ERROR. Sum of field weights must equal 100.'
 
         if err:
-            Label(self.input_frame, text='ERROR. Enter a numeric value for % core products.') \
-                .grid(row=self.last_row + 1, column=0)
+            self.ErrorLabel = Label(self.input_frame, text=err).grid(row=self.last_row + 1, column=0)
             return
 
         else:
@@ -221,7 +247,6 @@ class GUI:
     def format_vars(self):
         field_var = [x.get() for x in self.field_var]
 
-        cutoff_var = self.cutoff_var.get()
         segment_var = self.segment_var.get()
         wh_var = self.wh_var.get()
         region_var = self.region_var.get()
@@ -229,19 +254,18 @@ class GUI:
 
         try:
             wh_var = [int(wh_var)]
-            # print(self.wh_var)
 
         except ValueError:
             assert wh_var == 'All'
             wh_var = self.df['legacy_division_cd'].unique()
 
-        params = [segment_var, field_var, self.field_options, cutoff_var, self.df, self.fname]
+        params = [segment_var, field_var, self.field_options, self.cutoff, self.weights, self.df, self.fname]
 
         if level_var == 'warehouse':
-            self.model = WarehouseLevelVectors(wh_var, *params)
+            self.model = WarehouseLevelVectors(level_var, wh_var, *params)
 
         elif level_var == 'region':
-            self.model = RegionLevelVectors(region_var, *params)
+            self.model = RegionLevelVectors(level_var, region_var, *params)
 
     def loading_page2(self):
         self.define.withdraw()
