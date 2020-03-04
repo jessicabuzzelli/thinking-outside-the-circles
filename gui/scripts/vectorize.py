@@ -1,7 +1,8 @@
 import pandas as pd
 from itertools import compress
-import numpy as np
-
+import numpy as np  # enforce in packager -- diego had an issue
+# TODO - incorporate scaling
+# TODO - check cutoff idx for region level vecs
 
 def getdf(fname):
     df = pd.read_excel(fname, sheet_name='Sheet1')
@@ -68,21 +69,20 @@ class WarehouseLevelVectors:
 
     def format_df(self):
         self.continuous_labels = ['sales_6_mos',
-                             'qty_6mos',
-                             'cogs_6mos',
-                             # 'margin_%',
-                             'picks_6mos',
-                             'net_oh',
-                             'net_oh_$',
-                             'dioh']
+                                 'qty_6mos',
+                                 'cogs_6mos',
+                                 # 'margin_%',
+                                 'picks_6mos',
+                                 'net_oh',
+                                 'net_oh_$',
+                                 'dioh']
 
         self.df[self.continuous_labels] = self.df[self.continuous_labels][(self.df[self.continuous_labels] > 0)].fillna(0)
 
         if self.scaled:
-            self.df[self.continuous_labels] = self.df[self.continuous_labels].apply(self.get_max, axis=0)
-            # self.df.to_excel('../input_data/masked.xlsx')
+            self.df[self.continuous_labels] = self.df[self.continuous_labels].apply(self.divide_by_max, axis=0)
 
-    def get_max(self, col):
+    def divide_by_max(self, col):
         return col / self.maxes[col.name]
 
     def get_wh_to_prod(self):
@@ -118,7 +118,7 @@ class WarehouseLevelVectors:
                 'picks_6mos',
                 'qty_6mos',
                 'legacy_customer_cd',
-                'net_oh']
+                'net_oh_$']
 
         for w, p, s, c, pk, q, cust, oh in self.df[cols].values:
             if p in self.wh_to_prod[w]:
@@ -160,17 +160,19 @@ class WarehouseLevelVectors:
                 except ZeroDivisionError:
                     wp_to_margin[w, p] = 0
 
-        wp_to_te = {}
+        wp_to_turn = {}
         wp_to_profit = {}
         for w in self.wh:
             for p in self.wh_to_prod[w]:
                 if wp_to_oh[w, p] == 0:
-                    wp_to_te[w, p] = 0
+                    wp_to_turn[w, p] = 0
                 else:
-                    wp_to_te[w, p] = wp_to_margin[w, p] * wp_to_costs[w, p] / wp_to_oh[w, p]
+                    # wp_to_turn[w, p] = wp_to_margin[w, p] * wp_to_costs[w, p] / wp_to_oh[w, p]
+                    wp_to_turn[w, p] = wp_to_margin[w, p] * wp_to_costs[w, p] / wp_to_oh[w, p]
+
                 wp_to_profit[w, p] = wp_to_sales[w, p] - wp_to_costs[w, p]
 
-        self.maxes['turn_and_earn'] = wp_to_te[max(wp_to_te, key=wp_to_te.get)]
+        self.maxes['turn_6mos'] = wp_to_turn[max(wp_to_turn, key=wp_to_turn.get)]
         self.maxes['profit_6mos'] = wp_to_profit[max(wp_to_profit, key=wp_to_profit.get)]
         self.maxes['customers_per_product'] = wp_to_ncustomers[max(wp_to_ncustomers, key=wp_to_ncustomers.get)]
 
@@ -183,7 +185,7 @@ class WarehouseLevelVectors:
         self.wp_to_margin = wp_to_margin
         self.wp_to_coreflag = wp_to_coreflag
         self.wp_to_oh = wp_to_oh
-        self.wp_to_te = wp_to_te
+        self.wp_to_turn = wp_to_turn
         self.wp_to_profit = wp_to_profit
 
     def get_vectors(self):
@@ -192,7 +194,7 @@ class WarehouseLevelVectors:
 
         var_dict = {'profit_6mos': self.wp_to_profit,
                     "margin_%": self.wp_to_margin,
-                    'turn_and_earn': self.wp_to_te,
+                    'turn_6mos': self.wp_to_turn,
                     'customers_per_product': self.wp_to_ncustomers,
                     'sales_6_mos': self.wp_to_sales,
                     'cogs_6mos': self.wp_to_costs,
@@ -208,7 +210,7 @@ class WarehouseLevelVectors:
                         vec.append(var_dict[key][w, p] / self.maxes[key])
                     else:
                         vec.append(var_dict[key][w, p])
-                # vec = [self.wp_to_te[w, p], self.wp_to_profit[w, p], self.wp_to_ncustomers[w, p]]
+                # vec = [self.wp_to_turn[w, p], self.wp_to_profit[w, p], self.wp_to_ncustomers[w, p]]
                 # vec = np.linalg.norm(vec)
                 vec = self.norm(vec)
                 wp_to_vector[w, p] = vec
@@ -279,7 +281,7 @@ class WarehouseLevelVectors:
             for w in self.wh:
                 try:
                     core_avg_profit.append(self.wp_to_profit[w, p])
-                    core_avg_TE.append(self.wp_to_te[w, p])
+                    core_avg_TE.append(self.wp_to_turn[w, p])
                     core_avg_ncust.append(self.wp_to_ncustomers[w, p])
                 except KeyError:
                     pass
@@ -292,7 +294,7 @@ class WarehouseLevelVectors:
             for w in self.wh:
                 try:
                     non_core_avg_profit.append(self.wp_to_profit[w, p])
-                    non_core_avg_TE.append(self.wp_to_te[w, p])
+                    non_core_avg_TE.append(self.wp_to_turn[w, p])
                     non_core_avg_ncust.append(self.wp_to_ncustomers[w, p])
                 except KeyError:
                     pass
@@ -307,7 +309,7 @@ class WarehouseLevelVectors:
         for wh in self.wh:
             for p in self.wh_to_prod[wh]:
                 avg_profit.append(self.wp_to_profit[wh, p])
-                avg_TE.append(self.wp_to_te[wh, p])
+                avg_TE.append(self.wp_to_turn[wh, p])
                 avg_ncust.append(self.wp_to_ncustomers[wh, p])
         avg_profit = np.round(np.average(avg_profit),2)
         avg_TE = np.round(np.average(avg_TE),2)
@@ -358,9 +360,10 @@ class RegionLevelVectors:
         self.segment = segment
         self.df = df[df['segment'] == self.segment]
 
-        self.region = region
-        if self.region == 'All':
+        if region == 'All':
             self.region = self.df['legacy_system_cd'].unique()
+        else:
+            self.region = [region]
 
         for region in self.df['legacy_system_cd'].unique():
             if region not in self.region:
@@ -429,7 +432,7 @@ class RegionLevelVectors:
                 'picks_6mos',
                 'qty_6mos',
                 'legacy_customer_cd',
-                'net_oh']
+                'net_oh_$']
 
         for r, p, s, c, pk, q, cust, oh in self.df[cols].values:
             if p in self.region_to_prod[r]:
@@ -471,17 +474,19 @@ class RegionLevelVectors:
                 except ZeroDivisionError:
                     r_to_margin[r, p] = 0
 
-        r_to_te = {}
+        r_to_turn = {}
         r_to_profit = {}
         for r in self.region:
-            for p in self.region_to_prod[w]:
+            for p in self.region_to_prod[r]:
                 if r_to_oh[r, p] == 0:
-                    r_to_te[r, p] = 0
+                    r_to_turn[r, p] = 0
                 else:
-                    r_to_te[r, p] = r_to_margin[r, p] * r_to_costs[r, p] / r_to_oh[r, p]
+                    # r_to_turn[r, p] = r_to_margin[r, p] * r_to_costs[r, p] / r_to_oh[r, p]
+                    r_to_turn[r, p] = r_to_costs[r, p] / r_to_oh[r, p]
+
                 r_to_profit[r, p] = r_to_sales[r, p] - r_to_costs[r, p]
 
-        self.maxes['turn_and_earn'] = r_to_te[max(r_to_te, key=r_to_te.get)]
+        self.maxes['turn_6mos'] = r_to_turn[max(r_to_turn, key=r_to_turn.get)]
         self.maxes['profit_6mos'] = r_to_profit[max(r_to_profit, key=r_to_profit.get)]
         self.maxes['customers_per_product'] = r_to_ncustomers[max(r_to_ncustomers, key=r_to_ncustomers.get)]
 
@@ -494,7 +499,7 @@ class RegionLevelVectors:
         self.r_to_margin = r_to_margin
         self.r_to_coreflag = r_to_coreflag
         self.r_to_oh = r_to_oh
-        self.r_to_te = r_to_te
+        self.r_to_turn = r_to_turn
         self.r_to_profit = r_to_profit
 
     def get_vectors(self):
@@ -503,7 +508,7 @@ class RegionLevelVectors:
 
         var_dict = {'profit_6mos': self.r_to_profit,
                     "margin_%": self.r_to_margin,
-                    'turn_and_earn': self.r_to_te,
+                    'turn_6mos': self.r_to_turn,
                     'customers_per_product': self.r_to_ncustomers,
                     'sales_6_mos': self.r_to_sales,
                     'cogs_6mos': self.r_to_costs,
@@ -519,13 +524,13 @@ class RegionLevelVectors:
                         vec.append(var_dict[key][w, p] / self.maxes[key])
                     else:
                         vec.append(var_dict[key][w, p])
-                # vec = [self.wp_to_te[w, p], self.wp_to_profit[w, p], self.wp_to_ncustomers[w, p]]
-                # vec = np.linalg.norm(vec)
+
                 vec = self.norm(vec)
                 r_to_vector[w, p] = vec
                 vecs.append(vec)
 
         self.vecs, self.r_to_vector = vecs, r_to_vector
+        # print(r_to_vector)
 
     def get_flags(self):
         r_to_flag = {}
@@ -536,7 +541,7 @@ class RegionLevelVectors:
                 prod_to_score[p] = self.r_to_vector[w, p]
 
             prods_by_score = sorted(prod_to_score, key=prod_to_score.__getitem__)
-
+            # print(prods_by_score)
             cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
             self.n_core = cutoffIdx
 
@@ -590,7 +595,7 @@ class RegionLevelVectors:
             for w in self.region:
                 try:
                     core_avg_profit.append(self.r_to_profit[w, p])
-                    core_avg_TE.append(self.r_to_te[w, p])
+                    core_avg_TE.append(self.r_to_turn[w, p])
                     core_avg_ncust.append(self.r_to_ncustomers[w, p])
                 except KeyError:
                     pass
@@ -603,7 +608,7 @@ class RegionLevelVectors:
             for w in self.region:
                 try:
                     non_core_avg_profit.append(self.r_to_profit[w, p])
-                    non_core_avg_TE.append(self.r_to_te[w, p])
+                    non_core_avg_TE.append(self.r_to_turn[w, p])
                     non_core_avg_ncust.append(self.r_to_ncustomers[w, p])
                 except KeyError:
                     pass
@@ -618,7 +623,7 @@ class RegionLevelVectors:
         for wh in self.region:
             for p in self.region_to_prod[wh]:
                 avg_profit.append(self.r_to_profit[wh, p])
-                avg_TE.append(self.r_to_te[wh, p])
+                avg_TE.append(self.r_to_turn[wh, p])
                 avg_ncust.append(self.r_to_ncustomers[wh, p])
         avg_profit = np.round(np.average(avg_profit), 2)
         avg_TE = np.round(np.average(avg_TE), 2)
@@ -665,7 +670,7 @@ if __name__ == '__main__':
     m = WarehouseLevelVectors(wh=[19],
                               segment='Facility Solutions',
                               fields=[1, 1, 1],
-                              field_options=['turn_and_earn', 'profit_6mos', 'cogs_6mos'],
+                              field_options=['turn_6mos', 'profit_6mos', 'cogs_6mos'],
                               cutoff=20,
                               df=getdf("../../data/Clean_Data_short.xlsx"),
                               fname="../../data/Clean_Data.xlsx")

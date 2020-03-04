@@ -2,7 +2,8 @@ from tkinter import *
 import pandas as pd
 import numpy as np
 from gui.scripts.vectorize import WarehouseLevelVectors, RegionLevelVectors
-
+# TODO - add weighting option
+# TODO - add override option for reccomeding products to cut
 
 class GUI:
 
@@ -11,7 +12,7 @@ class GUI:
 
     def home(self):
         self.root = Tk()
-        self.root.eval('tk::PlaceWindow %s center' % self.root.winfo_pathname(self.root.winfo_id()))
+        # self.root.eval('tk::PlaceWindow %s center' % self.root.winfo_pathname(self.root.winfo_id()))
         self.root.title("Click UPLOAD to begin")
         self.root.config(bg="white")
 
@@ -103,7 +104,7 @@ class GUI:
                    'pallet_quantity',
                    'margin_%']
 
-        self.field_options = ['turn_and_earn', 'profit_6mos', 'customers_per_product'] + \
+        self.field_options = ['turn_6mos', 'profit_6mos', 'customers_per_product'] + \
                              [x for x in self.df.columns if x in options]
 
         wh_options = self.df.legacy_division_cd.unique().astype(str)
@@ -128,19 +129,20 @@ class GUI:
         self.cutoff_var = StringVar(self.root, value='20')
         self.field_var = []
         self.region_var = StringVar(self.root, value='All')
-        self.level_var = StringVar(self.root)
+        self.level_var = StringVar(self.root, value='warehouse')
 
     def input_page(self):
         self.loading.withdraw()
 
         define = Toplevel()
         self.define = define
-        self.root.eval('tk::PlaceWindow %s center' % self.define.winfo_pathname(self.define.winfo_id()))
+        # self.root.eval('tk::PlaceWindow %s center' % self.define.winfo_pathname(self.define.winfo_id()))
         define.title("Define inputs")
         define.config(bg="white")
         frame = Frame(define)
         self.input_frame = frame
 
+        # TODO - incorporate way to get overall Core/Noncore override param
         Label(frame, text="Modify model inputs below and click RUN. ").grid(row=0, column=1, pady=10)
         Button(frame, text="RUN", width=8, command=self.check_inputs).grid(row=0, column=2, pady=10)
 
@@ -246,7 +248,7 @@ class GUI:
 
         loading2 = Toplevel()
         self.loading2 = loading2
-        self.root.eval('tk::PlaceWindow %s center' % self.loading2.winfo_pathname(self.loading2.winfo_id()))
+        # self.root.eval('tk::PlaceWindow %s center' % self.loading2.winfo_pathname(self.loading2.winfo_id()))
         loading2.title("Loading...")
         loading2.config(bg="white")
         frame = Frame(loading2)
@@ -266,7 +268,7 @@ class GUI:
 
         outputs = Toplevel()
         self.outputs = outputs
-        self.root.eval('tk::PlaceWindow %s center' % self.outputs.winfo_pathname(self.outputs.winfo_id()))
+        # self.root.eval('tk::PlaceWindow %s center' % self.outputs.winfo_pathname(self.outputs.winfo_id()))
         outputs.title("Outputs")
         outputs.config(bg="white")
         frame = Frame(outputs)
