@@ -255,14 +255,14 @@ class GUI:
         obj_var = self.objective.get()
 
         try:
-            wh_var = [int(x) for x in wh_var]
+            wh_var = [int(wh_var)]
 
         except ValueError:
             assert wh_var == 'All'
             wh_var = self.df['legacy_division_cd'].unique()
 
         try:
-            region_var = [int(x) for x in region_var]
+            region_var = [int(region_var)]
 
         except ValueError:
             assert region_var == 'All'
