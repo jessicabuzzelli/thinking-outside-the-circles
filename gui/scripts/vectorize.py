@@ -4,6 +4,7 @@ import numpy as np  # enforce in packager -- diego had an issue
 # TODO - incorporate scaling
 # TODO - check cutoff idx for region level vecs
 
+
 def getdf(fname):
     df = pd.read_excel(fname, sheet_name='Sheet1')
 
@@ -45,7 +46,7 @@ def getdf(fname):
 
 
 class WarehouseLevelVectors:
-    def __init__(self, wh, segment, fields, field_options, cutoff, df, fname, scaled=False):
+    def __init__(self, level, wh, segment, fields, field_options, cutoff, weights, df, fname, scaled=False):
         self.scaled = scaled
         self.fname = fname
 
@@ -331,17 +332,17 @@ class WarehouseLevelVectors:
         string = """For warehouse(s) {}:
         
             Number of core items: {}
-            Core items average profit: {}
-            Core items average turn and earn: {}
+            Core items average Profit: {}
+            Core items average Turn: {}
             Core items average number of customers: {}
             
             Number of non core items: {}
             Non Core Items Average Profit: {}
-            Non Core Items Average TE: {}
+            Non Core Items Average Turn: {}
             Non Core Items Average number of customers: {}
             
             All Items in warehouse average profit: {}
-            All Items in warehouse average TE: {}
+            All Items in warehouse average Turn: {}
             All Items in warehouse average number of customers: {}""".format(*inputs)
 
         return string
@@ -353,7 +354,7 @@ class WarehouseLevelVectors:
 
 
 class RegionLevelVectors:
-    def __init__(self, region, segment, fields, field_options, cutoff, df, fname, scaled=False):
+    def __init__(self, level, region, segment, fields, field_options, cutoff, weights, df, fname, scaled=False):
         self.scaled = scaled
         self.fname = fname
 
