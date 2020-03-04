@@ -65,12 +65,15 @@ class Vectorize:
             self.level = 'legacy_division_cd'
         elif level == 'region':
             self.level = 'legacy_system_cd'
+        else:
+            self.level = 'legacy_system_cd'  # doesn't matter, evaluating on enterprise level
 
         self.selections = selections  # warehouses selected OR regions selected, depending on level
 
-        for option in self.df[self.level].unique():
-            if option not in self.selections:
-                self.df = self.df[self.df[self.level] != option]
+        if self.level != 'enterprise':
+            for option in self.df[self.level].unique():
+                if option not in self.selections:
+                    self.df = self.df[self.df[self.level] != option]
 
         self.maxes = self.df.max(axis=0).to_dict()
         self.mins = self.df.min(axis=0).to_dict()
@@ -252,37 +255,43 @@ class Vectorize:
     def get_flags(self):
         wp_to_flag = {}
 
-        for w in self.selections:
-            prod_to_score = {}
+        if self.level != 'enterprise':
+            for w in self.selections:
+                prod_to_score = {}
 
-            for p in self.selections_to_prod[w]:
-                prod_to_score[p] = self.wp_to_vectorscore[w, p]
+                for p in self.selections_to_prod[w]:
+                    prod_to_score[p] = self.wp_to_vectorscore[w, p]
 
-            prods_by_score = sorted(prod_to_score, key=prod_to_score.__getitem__)
+                prods_by_score = sorted(prod_to_score, key=prod_to_score.__getitem__)
 
-            cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
-            self.n_core = cutoffIdx
+                cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
+                self.n_core = cutoffIdx
 
-            if self.objective == 'Identify core products':
-                extras = prods_by_score[:cutoffIdx]
-                target = prods_by_score[cutoffIdx:]
-                self.targetname = 'Core'
-                self.extraname = 'Non-Core'
+                if self.objective == 'Identify core products':
+                    extras = prods_by_score[:cutoffIdx]
+                    target = prods_by_score[cutoffIdx:]
+                    self.targetname = 'Core'
+                    self.extraname = 'Non-Core'
 
-            else:
-                assert self.objective == 'Identify products to remove'
-                target = prods_by_score[cutoffIdx:]
-                extras = prods_by_score[:cutoffIdx]
-                self.targetname = 'removed'
-                self.extraname = 'kept'
+                else:
+                    assert self.objective == 'Identify products to remove'
+                    target = prods_by_score[cutoffIdx:]
+                    extras = prods_by_score[:cutoffIdx]
+                    self.targetname = 'removed'
+                    self.extraname = 'kept'
 
-            for p in extras:
-                wp_to_flag[w, p] = 0
+                for p in extras:
+                    wp_to_flag[w, p] = 0
 
-            for p in target:
-                wp_to_flag[w, p] = 1
+                for p in target:
+                    wp_to_flag[w, p] = 1
+
+        else:
+            print("hooray!")
+            pass
 
         self.wp_to_flag = wp_to_flag
+        self.df['new_core_flag'] = self.df.apply(self.iscore, axis=1)
 
     def norm(self, vec):
         vec = np.array(vec)
@@ -299,7 +308,6 @@ class Vectorize:
             return -(-sum(np.sign(vec) * (np.abs(vec * self.weights) ** length)) ** (1 / length))
 
     def export(self, fout):
-        self.df['New Core Flag'] = self.df.apply(self.iscore, axis=1)
         self.df.to_excel(fout)
 
     def iscore(self, row):
@@ -386,7 +394,7 @@ class Vectorize:
                   self.levelinput,
                   avg_ncust]
 
-        string = """For {}(s) {}:
+        string1 = """For {}(s) {}:
 
             Number of {} items: {}
             Core items average profit: {}
@@ -402,7 +410,25 @@ class Vectorize:
             All items in {}(s) average turn: {}
             All items in {}(s) average number of customers: {}""".format(*inputs)
 
-        return string
+        if self.objective == 'Identify products to remove':
+            return string1
+
+        else:
+            v_core_df = self.df.loc[self.df['core_item_flag'] == 'Y']
+            new_core_df = self.df.loc[self.df['new_core_flag'] == 'Y']
+
+            num_delta = len(v_core_df) - len(new_core_df)
+            num_sign = 'fewer' if num_delta <= 0 else 'more'
+
+            inputs2 = [abs(num_delta),
+                       num_sign
+                       ]
+
+            string2 = """\n\nCompared to the original Core products:
+            - The model identified {} {} Core products.
+            - 
+            """.format(*inputs2)
+            return string1 + string2
 
     def run(self):
         self.get_mappings()

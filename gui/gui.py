@@ -121,7 +121,7 @@ class GUI:
         if self.region_options is None:
             return 'no regions'
 
-        self.level_options = ['warehouse', 'region']  # TODO - check to see if add hub
+        self.level_options = ['enterprise', 'warehouse', 'region']  # TODO - check to see if add hub
         self.region_options = np.append(['All'], self.region_options)
         self.wh_options = np.append(['All'], wh_options)
 
@@ -131,7 +131,7 @@ class GUI:
         self.field_var = []
         self.weight_var = []
         self.region_var = StringVar(self.root, value='All')
-        self.level_var = StringVar(self.root, value='warehouse')
+        self.level_var = StringVar(self.root, value='enterprise')
         self.objective = StringVar(self.root, value='Identify core products')
 
     def input_page(self):
@@ -275,6 +275,9 @@ class GUI:
 
         elif level_var == 'region':
             self.model = Vectorize(level_var, region_var, *params)
+
+        else:
+            self.model = Vectorize(level_var, wh_var, *params)
 
     def loading_page2(self):
         self.define.withdraw()
