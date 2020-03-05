@@ -261,22 +261,26 @@ class Vectorize:
 
                 for p in self.selections_to_prod[w]:
                     prod_to_score[p] = self.wp_to_vectorscore[w, p]
-
+                #ascending order
                 prods_by_score = sorted(prod_to_score, key=prod_to_score.__getitem__)
 
                 cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
                 self.n_core = cutoffIdx
 
                 if self.objective == 'Identify core products':
-                    extras = prods_by_score[:cutoffIdx]
+                    #target: core products
+                    #extras: non core products
                     target = prods_by_score[cutoffIdx:]
+                    extras = prods_by_score[:cutoffIdx]
                     self.targetname = 'Core'
                     self.extraname = 'Non-Core'
 
                 else:
                     assert self.objective == 'Identify products to remove'
-                    target = prods_by_score[cutoffIdx:]
-                    extras = prods_by_score[:cutoffIdx]
+                    #target: bottom performing items (to remove)
+                    #extras: top performing items
+                    target = prods_by_score[:cutoffIdx]
+                    extras = prods_by_score[cutoffIdx:]
                     self.targetname = 'removed'
                     self.extraname = 'kept'
 
@@ -432,6 +436,7 @@ class Vectorize:
             All items in {}(s) average number of customers: {}""".format(*inputs)
 
         if self.objective == 'Identify products to remove':
+            #target: the products to remove
             return string1
 
         else:
