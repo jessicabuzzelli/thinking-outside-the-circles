@@ -316,6 +316,59 @@ class Vectorize:
         else:
             return 'Y'
 
+    def calculate_statistics(self, core, non_core):
+        core_avg_profit = []
+        non_core_avg_profit = []
+        core_avg_TE = []
+        non_core_avg_TE = []
+        core_avg_ncust = []
+        non_core_avg_ncust = []
+
+        for p in core:
+            for w in self.selections:
+                try:
+                    core_avg_profit.append(self.wp_to_profit[w, p])
+                    core_avg_TE.append(self.wp_to_turn[w, p])
+                    core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+
+                except KeyError:
+                    pass
+
+        core_avg_profit = np.round(np.average(core_avg_profit),2)
+        core_avg_TE = np.round(np.average(core_avg_TE),2)
+        core_avg_ncust = np.round(np.average(core_avg_ncust),2)
+
+        for p in non_core:
+            for w in self.selections:
+                try:
+                    non_core_avg_profit.append(self.wp_to_profit[w, p])
+                    non_core_avg_TE.append(self.wp_to_turn[w, p])
+                    non_core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+
+                except KeyError:
+                    pass
+
+        non_core_avg_profit = np.round(np.average(non_core_avg_profit), 2)
+        non_core_avg_TE = np.round(np.average(non_core_avg_TE), 2)
+        non_core_avg_ncust = np.round(np.average(non_core_avg_ncust), 2)
+
+        avg_profit = []
+        avg_TE = []
+        avg_ncust = []
+        for selections in self.selections:
+            for p in self.selections_to_prod[selections]:
+                avg_profit.append(self.wp_to_profit[selections, p])
+                avg_TE.append(self.wp_to_turn[selections, p])
+                avg_ncust.append(self.wp_to_ncustomers[selections, p])
+                
+        avg_profit = np.round(np.average(avg_profit), 2)
+        avg_TE = np.round(np.average(avg_TE), 2)
+        avg_ncust = np.round(np.average(avg_ncust), 2)
+        
+        return core_avg_profit, core_avg_TE, core_avg_ncust, \
+            non_core_avg_profit, non_core_avg_TE, non_core_avg_ncust, \
+            avg_profit, avg_TE, avg_ncust
+
     def string_output(self):
         target = []
         extras = []
@@ -327,53 +380,21 @@ class Vectorize:
                 else:
                     target.append(p)
 
-        target_avg_profit = []
-        extras_avg_profit = []
-        target_avg_turn = []
-        extras_avg_turn = []
-        target_avg_ncust = []
-        extras_avg_ncust = []
+        target_avg_profit, target_avg_turn, target_avg_ncust, \
+            extras_avg_profit, extras_avg_turn, extras_avg_ncust, \
+            avg_profit, avg_turn, avg_ncust = self.calculate_statistics(target, extras)
+        
+        if self.level == 'legacy_division_cd':
+            level = 'warehouse'
+        elif self.level == 'legacy_system_cd':
+            level = 'region'
+        
+        veritiv_core = self.df['legacy_product_cd'][(self.df['core_item_flag'] == "Y")]
+        veritiv_non_core = self.df['legacy_product_cd'][(self.df['core_item_flag'] == "N")]
 
-        for p in target:
-            for w in self.selections:
-                try:
-                    target_avg_profit.append(self.wp_to_profit[w, p])
-                    target_avg_turn.append(self.wp_to_turn[w, p])
-                    target_avg_ncust.append(self.wp_to_ncustomers[w, p])
-
-                except KeyError:
-                    pass
-
-        target_avg_profit = np.average(target_avg_profit)
-        target_avg_turn = np.average(target_avg_turn)
-        target_avg_ncust = np.average(target_avg_ncust)
-
-        for p in extras:
-            for w in self.selections:
-                try:
-                    extras_avg_profit.append(self.wp_to_profit[w, p])
-                    extras_avg_turn.append(self.wp_to_turn[w, p])
-                    extras_avg_ncust.append(self.wp_to_ncustomers[w, p])
-
-                except KeyError:
-                    pass
-
-        extras_avg_profit = np.round(np.average(extras_avg_profit), 2)
-        extras_avg_turn = np.round(np.average(extras_avg_turn), 2)
-        extras_avg_ncust = np.round(np.average(extras_avg_ncust), 2)
-
-        avg_profit = []
-        avg_turn = []
-        avg_ncust = []
-        for selections in self.selections:
-            for p in self.selections_to_prod[selections]:
-                avg_profit.append(self.wp_to_profit[selections, p])
-                avg_turn.append(self.wp_to_turn[selections, p])
-                avg_ncust.append(self.wp_to_ncustomers[selections, p])
-
-        avg_profit = np.round(np.average(avg_profit), 2)
-        avg_turn = np.round(np.average(avg_turn), 2)
-        avg_ncust = np.round(np.average(avg_ncust), 2)
+        veritiv_core_avg_profit, veritiv_core_avg_turn, veritiv_core_avg_ncust, \
+        veritiv_non_core_avg_profit, veritiv_non_core_avg_turn, veritiv_non_core_avg_ncust, \
+        veritiv_avg_profit, veritiv_avg_turn, veritiv_avg_ncust = self.calculate_statistics(veritiv_core, veritiv_non_core)
 
         inputs = [self.levelinput,
                   self.selections,
@@ -421,12 +442,30 @@ class Vectorize:
             num_sign = 'fewer' if num_delta <= 0 else 'more'
 
             inputs2 = [abs(num_delta),
-                       num_sign
+                       num_sign,
+                       len(veritiv_core),
+                  veritiv_core_avg_profit,
+                  veritiv_core_avg_turn,
+                  veritiv_core_avg_ncust,
+                  len(veritiv_non_core),
+                  veritiv_non_core_avg_profit,
+                  veritiv_non_core_avg_turn,
+                  veritiv_non_core_avg_ncust,
                        ]
 
             string2 = """\n\nCompared to the original Core products:
             - The model identified {} {} Core products.
-            - 
+            - Veritiv Core Flag Results:
+
+            Number of core products: {}
+            Core items average profit: {}
+            Core items average turnover: {}
+            Core items average number of customers: {}
+
+            Number of non core products: {}
+            Non Core Items Average Profit: {}
+            Non Core Items Average turnover: {}
+            Non Core Items Average number of customers: {}
             """.format(*inputs2)
             return string1 + string2
 
