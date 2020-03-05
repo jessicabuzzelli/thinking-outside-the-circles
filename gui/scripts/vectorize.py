@@ -243,7 +243,7 @@ class Vectorize:
                         # scales here by adding most negative value, dividing by most positive number
                         # negative numbers were NOT previuosly filtered out and dictionary values are the actual values
                         # vector and vectorscore ONLY will reflect scaled values -- can use dictionary values for output
-                        vec.append((var_dict[key][w, p] + abs(self.mins[key])) / self.maxes[key])
+                        vec.append((var_dict[key][w, p] + abs(self.mins[key])) / (self.maxes[key]-self.mins[key]))
                     else:
                         vec.append(var_dict[key][w, p])
 
