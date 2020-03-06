@@ -121,6 +121,7 @@ class Vectorize:
         wp_to_picks = {}
         wp_to_quantity = {}
         wp_to_ncustomers = {}
+        wp_to_customers = {}
         wp_to_pallet = {}
         wp_to_oh = {}
 
@@ -131,6 +132,7 @@ class Vectorize:
                 wp_to_picks[w, p] = []
                 wp_to_quantity[w, p] = []
                 wp_to_ncustomers[w, p] = []
+                wp_to_customers[w,p] = []
                 wp_to_oh[w, p] = []
 
         cols = [self.level,
@@ -149,7 +151,8 @@ class Vectorize:
                     wp_to_costs[w, p].append(c)
                     wp_to_picks[w, p].append(pk)
                     wp_to_quantity[w, p].append(q)
-                    wp_to_ncustomers[w, p].append(cust)
+                    if cust not in wp_to_customers[w,p]:
+                        wp_to_customers[w, p].append(cust)
                     wp_to_oh[w, p].append(oh)
 
             except KeyError:
@@ -161,7 +164,7 @@ class Vectorize:
                 wp_to_costs[w, p] = sum(wp_to_costs[w, p])
                 wp_to_picks[w, p] = sum(wp_to_picks[w, p])
                 wp_to_quantity[w, p] = sum(wp_to_quantity[w, p])
-                wp_to_ncustomers[w, p] = len(wp_to_ncustomers[w, p])
+                wp_to_ncustomers[w, p] = len(wp_to_customers[w, p])
                 wp_to_oh[w, p] = sum(wp_to_oh[w, p])
 
         wp_to_coreflag = {}
@@ -214,6 +217,7 @@ class Vectorize:
         self.wp_to_picks = wp_to_picks
         self.wp_to_quantity = wp_to_quantity
         self.wp_to_ncustomers = wp_to_ncustomers
+        self.wp_to_customers = wp_to_customers
         self.wp_to_pallet = wp_to_pallet
         self.wp_to_margin = wp_to_margin
         self.wp_to_coreflag = wp_to_coreflag
@@ -437,6 +441,39 @@ class Vectorize:
 
         if self.objective == 'Identify products to remove':
             #target: the products to remove
+            print(target)
+
+            #number of products only bought by one customer
+            nprod_one_cust = 0
+            for w in self.selections:
+                for p in target:
+                    if p in self.selections_to_prod[w] and self.wp_to_ncustomers[w,p] == 1:
+                            nprod_one_cust += 1
+            print(nprod_one_cust)
+            #number of products only bought by one customer and that customer only bought one item
+            #create a customer to unique products bought dictionary
+            customers = self.df['legacy_customer_cd'].unique()
+            cust_to_prod = {}
+            for c in customers:
+                cust_to_prod[c] = []
+            for c, p in zip(self.df['legacy_customer_cd'], self.df['legacy_product_cd']):
+                if p not in cust_to_prod[c]:
+                    cust_to_prod[c].append(p)
+            
+            nprod_one_cust_one_product = 0
+            for w in self.selections:
+                for p in target:
+                    if p in self.selections_to_prod[w] and self.wp_to_ncustomers[w,p] == 1:
+                        cust = self.wp_to_customers[w,p][0]
+                        if len(cust_to_prod[cust]) == 1:
+                            nprod_one_cust_one_product += 1
+            
+            print(nprod_one_cust_one_product)
+
+                
+
+            #number of products bought by national accounts
+            
             return string1
 
         else:
@@ -483,13 +520,14 @@ class Vectorize:
 if __name__ == '__main__':
     m = Vectorize(weights=[33.33, 33.33, 33.33],
                   level='warehouse',
-                  selections=['All'],
+                  selections=[19],
+                  objective='Identify products to remove',
                   segment='Facility Solutions',
                   fields=[1, 1, 1],
                   field_options=['turn_6mos', 'profit_6mos', 'cogs_6mos'],
                   cutoff=20,
-                  df=getdf("../../data/Clean_Data_short.xlsx"),
-                  fname="../../data/Clean_Data.xlsx")
+                  df=getdf("../../../data/Clean_Data_short.xlsx"),
+                  fname="../../../data/Clean_Data.xlsx")
 
     m.run()
     print(m.string_output())
