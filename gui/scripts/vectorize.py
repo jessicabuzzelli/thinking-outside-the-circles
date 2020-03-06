@@ -441,7 +441,6 @@ class Vectorize:
 
         if self.objective == 'Identify products to remove':
             #target: the products to remove
-            print(target)
 
             #number of products only bought by one customer
             nprod_one_cust = 0
@@ -449,7 +448,6 @@ class Vectorize:
                 for p in target:
                     if p in self.selections_to_prod[w] and self.wp_to_ncustomers[w,p] == 1:
                             nprod_one_cust += 1
-            print(nprod_one_cust)
             #number of products only bought by one customer and that customer only bought one item
             #create a customer to unique products bought dictionary
             customers = self.df['legacy_customer_cd'].unique()
@@ -467,14 +465,24 @@ class Vectorize:
                         cust = self.wp_to_customers[w,p][0]
                         if len(cust_to_prod[cust]) == 1:
                             nprod_one_cust_one_product += 1
-            
-            print(nprod_one_cust_one_product)
 
-                
+            inputs_to_delete = [len(target),nprod_one_cust, 
+                                nprod_one_cust_one_product, 
+                                target_avg_profit, 
+                                target_avg_ncust,
+                                target_avg_turn]
 
-            #number of products bought by national accounts
-            
-            return string1
+            to_delete_string = """
+                -The model identified {} products to delete.
+                -Of these products:
+                    -{} where only bought by one customer.
+                    -{} where only bought by one customer and that customer only bought one product. 
+                -Average profit of products to delete: {}
+                -Average number of customers of products to delete: {}
+                -Average turnover of products to delete: {}
+            """.format(*inputs_to_delete)
+
+            return to_delete_string
 
         else:
             v_core_df = self.df.loc[self.df['core_item_flag'] == 'Y']
