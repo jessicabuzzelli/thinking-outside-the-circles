@@ -1,6 +1,7 @@
 import pandas as pd
+import numpy as np
 from itertools import compress
-import numpy as np  # enforce in packager -- diego had an issue
+from math import ceil
 
 
 def getdf(fname):
@@ -29,277 +30,133 @@ def getdf(fname):
 
     df = df[keep].fillna(0).replace('-', 0)
 
-    continuous_labels = ['sales_6_mos',
-                         'qty_6mos',
-                         'cogs_6mos',
-                         'margin_%',
-                         'picks_6mos',
-                         'net_oh',
-                         'net_oh_$',
-                         'dioh']
-
-    df[continuous_labels] = df[continuous_labels][(df[continuous_labels] > 0)].fillna(0)
-
     return df
 
 
 class Vectorize:
-    def __init__(self, level, selections, objective, segment, fields, field_options, cutoff, weights, df, fname):
-        self.continuous_labels = ['sales_6_mos',
-                                  'qty_6mos',
-                                  'cogs_6mos',
-                                  # 'margin_%',
-                                  'picks_6mos',
-                                  'net_oh',
-                                  'net_oh_$',
-                                  'dioh']
 
-        self.fname = fname
-        self.objective = objective
-
+    def __init__(self, level, choices, obj, segment, fields, field_options, cutoff, weights, df, fname):
+        self.obj = obj  # either "Identify core products" or "Identify products to cut"
         self.segment = segment
-        self.df = df[df['segment'] == self.segment]
+        self.fname = fname
+        self.cutoff = cutoff  # % core or % cut
 
-        self.levelinput = level
-        if level == 'warehouse':
-            self.level = 'legacy_division_cd'
-        elif level == 'region':
-            self.level = 'legacy_system_cd'
-        else:
-            self.level = 'legacy_system_cd'  # doesn't matter, evaluating on enterprise level
+        self.level = 'legacy_division_cd' if level == 'warehouse' else 'legacy_system_cd'  # if region
 
-        self.selections = selections  # warehouses selected OR regions selected, depending on level
+        self.selected_fields = list(compress(field_options, [*fields]))
+        self.weights = np.array(list(filter(lambda num: num != 0, weights)))
 
-        if self.level != 'enterprise':
-            for option in self.df[self.level].unique():
-                if option not in self.selections:
-                    self.df = self.df[self.df[self.level] != option]
-
+        self.df, self.choices = self.format_df(df, choices)
         self.maxes = self.df.max(axis=0).to_dict()
         self.mins = self.df.min(axis=0).to_dict()
 
-        # self.format_df()
+        # each unique entity (wh or region) based on level to their list of products
+        self.level_to_prod = {choice: self.df[self.df[self.level] == choice]['legacy_product_cd'].unique() for
+                              choice in self.choices}
 
-        self.field_options = field_options
-        self.fields = fields
-        self.cutoff = cutoff
-        self.weights = np.array(list(filter(lambda num: num != 0, weights)))
+        self.combs = []
+        for w in self.choices:
+            for p in self.level_to_prod[w]:
+                self.combs += [(w, p)]
 
-        self.selected_fields = compress(self.field_options, [bool(x) for x in self.fields])
+    def format_df(self, df, choices):
+        df = df[df['segment'] == self.segment]
 
-        self.selections_to_prod = self.get_selections_to_prod()
+        # get rid of rows that don't map to one of the selected regions/warehouses
+        if choices[0] != 'All':
+            for option in df[self.level].unique():
+                if option not in choices:
+                    df = df[df[self.level] != option]
 
-    # def format_df(self):
-    #     self.continuous_labels = ['sales_6_mos',
-    #                               'qty_6mos',
-    #                               'cogs_6mos',
-    #                               # 'margin_%',
-    #                               'picks_6mos',
-    #                               'net_oh',
-    #                               'net_oh_$',
-    #                               'dioh']
+        choices = choices if choices[0] != 'All' else df[self.level].unique()
 
-        # self.df[self.continuous_labels] = self.df[self.continuous_labels][(self.df[self.continuous_labels] > 0)].fillna(
-        #     0)
+        df.loc[:, 'core_item_flag'] = df['core_item_flag'].map(lambda x: 0 if x == 'F' else 1)
 
-        # self.df[self.continuous_labels] = self.df[self.continuous_labels].apply(self.scale, axis=0)
-
-    # def scale(self, col):
-    #     return (col + min(col)) / max(col)
-
-    def get_selections_to_prod(self):
-        selections_to_prod = {}
-
-        for selections in self.selections:
-            selections_to_prod[selections] = self.df[self.df[self.level] == selections]['legacy_product_cd'].unique()
-
-        return selections_to_prod
+        return df, choices
 
     def get_mappings(self):
-        wp_to_sales = {}
-        wp_to_costs = {}
-        wp_to_picks = {}
-        wp_to_quantity = {}
-        wp_to_ncustomers = {}
-        wp_to_customers = {}
-        wp_to_pallet = {}
-        wp_to_oh = {}
-
-        for w in self.selections:
-            for p in self.selections_to_prod[w]:
-                wp_to_sales[w, p] = []
-                wp_to_costs[w, p] = []
-                wp_to_picks[w, p] = []
-                wp_to_quantity[w, p] = []
-                wp_to_ncustomers[w, p] = []
-                wp_to_customers[w,p] = []
-                wp_to_oh[w, p] = []
-
-        cols = [self.level,
-                'legacy_product_cd',
-                'sales_6_mos',
-                'cogs_6mos',
-                'picks_6mos',
-                'qty_6mos',
-                'legacy_customer_cd',
-                'net_oh_$']
-
-        for w, p, s, c, pk, q, cust, oh in self.df[cols].values:
-            try:
-                if p in self.selections_to_prod[w]:
-                    wp_to_sales[w, p].append(s)
-                    wp_to_costs[w, p].append(c)
-                    wp_to_picks[w, p].append(pk)
-                    wp_to_quantity[w, p].append(q)
-                    if cust not in wp_to_customers[w,p]:
-                        wp_to_customers[w, p].append(cust)
-                    wp_to_oh[w, p].append(oh)
-
-            except KeyError:
+        needed = []
+        for field in self.selected_fields:
+            if field in ['sales_6_mos', 'cogs_6mos', 'qty_6mos', 'picks_6mos', 'net_oh_$']:
+                needed += [field]
+            elif field in ['profit_6mos', 'margin']:
+                needed += ['cogs_6mos', 'sales_6_mos']
+            elif field == 'turn_6mos':
+                needed += ['net_oh_$', 'cogs_6mos']
+            elif field == 'customers_per_product':
+                needed += ['legacy_customer_cd']
+            else:
                 pass
 
-        for w in self.selections:
-            for p in self.selections_to_prod[w]:
-                wp_to_sales[w, p] = sum(wp_to_sales[w, p])
-                wp_to_costs[w, p] = sum(wp_to_costs[w, p])
-                wp_to_picks[w, p] = sum(wp_to_picks[w, p])
-                wp_to_quantity[w, p] = sum(wp_to_quantity[w, p])
-                wp_to_ncustomers[w, p] = len(wp_to_customers[w, p])
-                wp_to_oh[w, p] = sum(wp_to_oh[w, p])
+        needed = set(needed)
 
-        wp_to_coreflag = {}
-        for w, p, cf in self.df[[self.level, 'legacy_product_cd', 'core_item_flag']].values:
-            try:
-                if p in self.selections_to_prod[w]:
-                    if cf == "Y":
-                        wp_to_coreflag[w, p] = 1
-                    if cf == "N":
-                        wp_to_coreflag[w, p] = 0
-            except KeyError:
-                pass
+        needed_dicts = {}
+        needed_cols = [x for x in needed
+                       if x in ['sales_6_mos', 'cogs_6mos', 'qty_6mos', 'picks_6mos', 'net_oh_$']]
 
-        wp_to_margin = {}
-        for w in self.selections:
-            for p in self.selections_to_prod[w]:
-                s = wp_to_sales[w, p]
-                c = wp_to_costs[w, p]
-                #         ##DATA HAS TO BE CLEANED SO THAT COSTS THAT ARE EQUAL TO 0 DO NOT EXIST
-                #         if s == 0 or c==0:
-                #             wp_to_margin[w,p] = 0
-                #         else:
-                try:
-                    wp_to_margin[w, p] = 100 * ((s - c) / s)
-                except ZeroDivisionError:
-                    wp_to_margin[w, p] = 0
+        if needed_cols:
+            for arg in needed_cols:
+                needed_dicts[arg] = {(w, p):
+                                     self.df[(self.df[self.level] == w) & (self.df['legacy_product_cd'] == p)][arg].mean()
+                                     for (w, p) in self.combs}
 
-        wp_to_turn = {}
-        wp_to_profit = {}
-        for w in self.selections:
-            for p in self.selections_to_prod[w]:
-                if wp_to_oh[w, p] == 0:
-                    wp_to_turn[w, p] = 0
-                else:
-                    # wp_to_turn[w, p] = wp_to_margin[w, p] * wp_to_costs[w, p] / wp_to_oh[w, p]
-                    wp_to_turn[w, p] = wp_to_costs[w, p] / wp_to_oh[w, p]
+        if 'customers_per_product' in self.selected_fields:
+            needed_dicts['customers_per_product'] = {(w, p):
+                                                     len(self.df[(self.df[self.level] == w) & (self.df['legacy_product_cd'] == p)]['legacy_customer_cd'].unique())
+                                                     for (w, p) in self.combs}
+        if 'turn_6mos' in self.selected_fields:
+            needed_dicts['turn_6mos'] = {(w, p):
+                                         needed_dicts['cogs_6mos'][w, p] / needed_dicts['net_oh_$'][w, p]
+                                         if needed_dicts['net_oh_$'][w, p] != 0
+                                         else 0
+                                         for (w, p) in self.combs}
+        if 'profit_6mos' in self.selected_fields:
+            needed_dicts['profit_6mos'] = {(w, p):
+                                           needed_dicts['sales_6_mos'][w, p] - needed_dicts['cogs_6mos'][w, p]
+                                           for (w, p) in self.combs}
+        if 'margin' in self.selected_fields:
+            needed_dicts['margin'] = {(w, p): 100 * needed_dicts['profit_6mos'][w, p] / needed_dicts['cogs_6mos'][w, p]
+                                      if needed_dicts['cogs_6mos'] != 0
+                                      else 0
+                                      for (w, p) in self.combs}
 
-                wp_to_profit[w, p] = wp_to_sales[w, p] - wp_to_costs[w, p]
+        self.vector_dicts = {key: needed_dicts[key] for key in self.selected_fields}
 
-        self.maxes['turn_6mos'] = wp_to_turn[max(wp_to_turn, key=wp_to_turn.get)]
-        self.maxes['profit_6mos'] = wp_to_profit[max(wp_to_profit, key=wp_to_profit.get)]
-        self.maxes['customers_per_product'] = wp_to_ncustomers[max(wp_to_ncustomers, key=wp_to_ncustomers.get)]
-
-        self.mins['turn_6mos'] = wp_to_turn[min(wp_to_turn, key=wp_to_turn.get)]
-        self.mins['profit_6mos'] = wp_to_profit[min(wp_to_profit, key=wp_to_profit.get)]
-        self.mins['customers_per_product'] = wp_to_ncustomers[min(wp_to_ncustomers, key=wp_to_ncustomers.get)]
-
-        self.wp_to_sales = wp_to_sales
-        self.wp_to_costs = wp_to_costs
-        self.wp_to_picks = wp_to_picks
-        self.wp_to_quantity = wp_to_quantity
-        self.wp_to_ncustomers = wp_to_ncustomers
-        self.wp_to_customers = wp_to_customers
-        self.wp_to_pallet = wp_to_pallet
-        self.wp_to_margin = wp_to_margin
-        self.wp_to_coreflag = wp_to_coreflag
-        self.wp_to_oh = wp_to_oh
-        self.wp_to_turn = wp_to_turn
-        self.wp_to_profit = wp_to_profit
+        for key in self.selected_fields:
+            if key in ['margin', 'turn_6mos', 'profit_6mos', 'customers_per_product']:
+                self.maxes[key] = max(needed_dicts[key].values())
+                self.mins[key] = min(needed_dicts[key].values())
 
     def get_vectors(self):
-        vecs = []
-        wp_to_vectorscore = {}
+        for s in self.selected_fields:
+            self.df.loc[:, s + '_scaled'] = 0
 
-        var_dict = {'profit_6mos': self.wp_to_profit,
-                    "margin_%": self.wp_to_margin,
-                    'turn_6mos': self.wp_to_turn,
-                    'customers_per_product': self.wp_to_ncustomers,
-                    'sales_6_mos': self.wp_to_sales,
-                    'cogs_6mos': self.wp_to_costs,
-                    'qty_6mos': self.wp_to_quantity,
-                    'picks_6mos': self.wp_to_picks,
-                    'net_oh_$_6mos': self.wp_to_oh}
+        self.df.loc[:, 'vector'] = 0
 
-        for w in self.selections:
-            for p in self.selections_to_prod[w]:
+        self.wp_to_vectorscore = {}
+        # vecs = []
+
+        for w in self.level_to_prod.keys():
+            for p in self.level_to_prod[w]:
+
+                idxs = self.df[(self.df['legacy_division_cd'] == w) & (self.df['legacy_product_cd'] == p)].index
+
                 vec = []
+
                 for key in self.selected_fields:
-                    if key in self.continuous_labels:
-                        # scales here by adding most negative value, dividing by most positive number
-                        # negative numbers were NOT previuosly filtered out and dictionary values are the actual values
-                        # vector and vectorscore ONLY will reflect scaled values -- can use dictionary values for output
-                        vec.append((var_dict[key][w, p] + abs(self.mins[key])) / (self.maxes[key]-self.mins[key]))
-                    else:
-                        vec.append(var_dict[key][w, p])
+                    scaled = (self.vector_dicts[key][w, p] + abs(self.mins[key])) \
+                             / (abs(self.maxes[key]) + abs(self.mins[key]))
+                    vec.append(scaled)
 
-                wp_to_vectorscore[w, p] = 0 if vec == [] else self.norm(vec)
-                vecs.append(vec)
+                    for idx in idxs:
+                        self.df.loc[idx, key + '_scaled'] = scaled
 
-        self.vecs, self.wp_to_vectorscore = vecs, wp_to_vectorscore
+                self.wp_to_vectorscore[w, p] = 0 if vec == [] else self.norm(vec)
 
-    def get_flags(self):
-        wp_to_flag = {}
+                for idx in idxs:
+                    self.df.loc[idx, 'vector'] = self.wp_to_vectorscore[w, p]
 
-        if self.level != 'enterprise':
-            for w in self.selections:
-                prod_to_score = {}
-
-                for p in self.selections_to_prod[w]:
-                    prod_to_score[p] = self.wp_to_vectorscore[w, p]
-                #ascending order
-                prods_by_score = sorted(prod_to_score, key=prod_to_score.__getitem__)
-
-                cutoffIdx = int(len(prods_by_score) * (1 - (float(self.cutoff) / 100)))
-                self.n_core = cutoffIdx
-
-                if self.objective == 'Identify core products':
-                    #target: core products
-                    #extras: non core products
-                    target = prods_by_score[cutoffIdx:]
-                    extras = prods_by_score[:cutoffIdx]
-                    self.targetname = 'Core'
-                    self.extraname = 'Non-Core'
-
-                else:
-                    assert self.objective == 'Identify products to remove'
-                    #target: bottom performing items (to remove)
-                    #extras: top performing items
-                    target = prods_by_score[:cutoffIdx]
-                    extras = prods_by_score[cutoffIdx:]
-                    self.targetname = 'removed'
-                    self.extraname = 'kept'
-
-                for p in extras:
-                    wp_to_flag[w, p] = 0
-
-                for p in target:
-                    wp_to_flag[w, p] = 1
-
-        else:
-            print("hooray!")
-            pass
-
-        self.wp_to_flag = wp_to_flag
-        self.df['new_core_flag'] = self.df.apply(self.iscore, axis=1)
+                # vecs.append(vec)
 
     def norm(self, vec):
         vec = np.array(vec)
@@ -312,231 +169,65 @@ class Vectorize:
             return 0
 
         except ValueError:
-            # handles negative roots, but they shouldn't come up since all values >= 0
+            # handles negative roots, but they shouldn't come up since all values scales to >= 0
             return -(-sum(np.sign(vec) * (np.abs(vec * self.weights) ** length)) ** (1 / length))
 
-    def export(self, fout):
-        self.df.to_excel(fout)
-
-    def iscore(self, row):
-        if self.wp_to_flag[row[self.level], row['legacy_product_cd']] == 0:
-            return 'N'
+    def reshape(self, oneisall=False):
+        if self.obj == 'Identify core products':
+            self.cutoff = 100 - self.cutoff
+            self.targetname = 'new core'
+            self.nontargetname = 'new noncore'
         else:
-            return 'Y'
+            self.targetname = 'remove'
+            self.targetname = 'keep'
 
-    def calculate_statistics(self, core, non_core):
-        core_avg_profit = []
-        non_core_avg_profit = []
-        core_avg_TE = []
-        non_core_avg_TE = []
-        core_avg_ncust = []
-        non_core_avg_ncust = []
+        target_at_level = {}
+        nontarget_at_level = {}
 
-        for p in core:
-            for w in self.selections:
-                try:
-                    core_avg_profit.append(self.wp_to_profit[w, p])
-                    core_avg_TE.append(self.wp_to_turn[w, p])
-                    core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+        for w in self.choices:
+            # ignores duplicate (w, p) pairs when finding #core and #noncore
+            sorted_df = self.df[self.df[self.level] == w][['vector', 'legacy_product_cd']].sort_values(by='vector')
+            idxs = sorted_df.drop_duplicates(subset='legacy_product_cd', inplace=False, ignore_index=False).index
+            duplicates = sorted_df[sorted_df.duplicated(subset='legacy_product_cd')]['legacy_product_cd']
 
-                except KeyError:
-                    pass
+            cutoffidx = int(ceil(len(idxs) * self.cutoff / 100))
 
-        core_avg_profit = np.round(np.average(core_avg_profit),2)
-        core_avg_TE = np.round(np.average(core_avg_TE),2)
-        core_avg_ncust = np.round(np.average(core_avg_ncust),2)
+            target_at_level[w] = self.df.loc[idxs[cutoffidx:], 'legacy_product_cd'].values.tolist()
+            nontarget_at_level[w] = self.df.loc[idxs[:cutoffidx], 'legacy_product_cd'].values.tolist()
 
-        for p in non_core:
-            for w in self.selections:
-                try:
-                    non_core_avg_profit.append(self.wp_to_profit[w, p])
-                    non_core_avg_TE.append(self.wp_to_turn[w, p])
-                    non_core_avg_ncust.append(self.wp_to_ncustomers[w, p])
+            self.df.loc[idxs[:cutoffidx], self.targetname] = 0
+            self.df.loc[idxs[cutoffidx:], self.targetname] = 1
 
-                except KeyError:
-                    pass
+            for index, product in duplicates.items():
+                if product in target_at_level[w]:
+                    self.df.loc[index, self.targetname] = 1
+                else:
+                    self.df.loc[index, self.targetname] = 0
 
-        non_core_avg_profit = np.round(np.average(non_core_avg_profit), 2)
-        non_core_avg_TE = np.round(np.average(non_core_avg_TE), 2)
-        non_core_avg_ncust = np.round(np.average(non_core_avg_ncust), 2)
+        if oneisall == True:
+            targetprods = self.df[self.df[self.targetname] == 1]['legacy_product_cd'].unique()
 
-        avg_profit = []
-        avg_TE = []
-        avg_ncust = []
-        for selections in self.selections:
-            for p in self.selections_to_prod[selections]:
-                avg_profit.append(self.wp_to_profit[selections, p])
-                avg_TE.append(self.wp_to_turn[selections, p])
-                avg_ncust.append(self.wp_to_ncustomers[selections, p])
-                
-        avg_profit = np.round(np.average(avg_profit), 2)
-        avg_TE = np.round(np.average(avg_TE), 2)
-        avg_ncust = np.round(np.average(avg_ncust), 2)
-        
-        return core_avg_profit, core_avg_TE, core_avg_ncust, \
-            non_core_avg_profit, non_core_avg_TE, non_core_avg_ncust, \
-            avg_profit, avg_TE, avg_ncust
+            for tp in targetprods:
+                self.df.loc[self.df[self.df['legacy_product_cd'] == tp].index, 'new_core'] = 1
 
     def string_output(self):
-        target = []
-        extras = []
-
-        for selections in self.selections:
-            for p in self.selections_to_prod[selections]:
-                if self.wp_to_flag[selections, p] == 0:
-                    extras.append(p)
-                else:
-                    target.append(p)
-
-        target_avg_profit, target_avg_turn, target_avg_ncust, \
-            extras_avg_profit, extras_avg_turn, extras_avg_ncust, \
-            avg_profit, avg_turn, avg_ncust = self.calculate_statistics(target, extras)
-        
-        if self.level == 'legacy_division_cd':
-            level = 'warehouse'
-        elif self.level == 'legacy_system_cd':
-            level = 'region'
-        
-        veritiv_core = self.df['legacy_product_cd'][(self.df['core_item_flag'] == "Y")]
-        veritiv_non_core = self.df['legacy_product_cd'][(self.df['core_item_flag'] == "N")]
-
-        veritiv_core_avg_profit, veritiv_core_avg_turn, veritiv_core_avg_ncust, \
-        veritiv_non_core_avg_profit, veritiv_non_core_avg_turn, veritiv_non_core_avg_ncust, \
-        veritiv_avg_profit, veritiv_avg_turn, veritiv_avg_ncust = self.calculate_statistics(veritiv_core, veritiv_non_core)
-
-        inputs = [self.levelinput,
-                  self.selections,
-                  self.targetname,
-                  len(target),
-                  target_avg_profit,
-                  target_avg_turn,
-                  target_avg_ncust,
-                  self.extraname,
-                  len(extras),
-                  extras_avg_profit,
-                  extras_avg_turn,
-                  extras_avg_ncust,
-                  self.levelinput,
-                  avg_profit,
-                  self.levelinput,
-                  avg_turn,
-                  self.levelinput,
-                  avg_ncust]
-
-        string1 = """For {}(s) {}:
-
-            Number of {} items: {}
-            Core items average profit: {}
-            Core items average turn: {}
-            Core items average number of customers: {}
-
-            Number of {} items: {}
-            Non Core items average profit: {}
-            Non Core items average turn: {}
-            Non Core items average number of customers: {}
-
-            All items in {}(s) average profit: {}
-            All items in {}(s) average turn: {}
-            All items in {}(s) average number of customers: {}""".format(*inputs)
-
-        if self.objective == 'Identify products to remove':
-            #target: the products to remove
-
-            #number of products only bought by one customer
-            nprod_one_cust = 0
-            for w in self.selections:
-                for p in target:
-                    if p in self.selections_to_prod[w] and self.wp_to_ncustomers[w,p] == 1:
-                            nprod_one_cust += 1
-            #number of products only bought by one customer and that customer only bought one item
-            #create a customer to unique products bought dictionary
-            customers = self.df['legacy_customer_cd'].unique()
-            cust_to_prod = {}
-            for c in customers:
-                cust_to_prod[c] = []
-            for c, p in zip(self.df['legacy_customer_cd'], self.df['legacy_product_cd']):
-                if p not in cust_to_prod[c]:
-                    cust_to_prod[c].append(p)
-            
-            nprod_one_cust_one_product = 0
-            for w in self.selections:
-                for p in target:
-                    if p in self.selections_to_prod[w] and self.wp_to_ncustomers[w,p] == 1:
-                        cust = self.wp_to_customers[w,p][0]
-                        if len(cust_to_prod[cust]) == 1:
-                            nprod_one_cust_one_product += 1
-
-            inputs_to_delete = [len(target),nprod_one_cust, 
-                                nprod_one_cust_one_product, 
-                                target_avg_profit, 
-                                target_avg_ncust,
-                                target_avg_turn]
-
-            to_delete_string = """
-                -The model identified {} products to delete.
-                -Of these products:
-                    -{} where only bought by one customer.
-                    -{} where only bought by one customer and that customer only bought one product. 
-                -Average profit of products to delete: {}
-                -Average number of customers of products to delete: {}
-                -Average turnover of products to delete: {}
-            """.format(*inputs_to_delete)
-
-            return to_delete_string
-
-        else:
-            v_core_df = self.df.loc[self.df['core_item_flag'] == 'Y']
-            new_core_df = self.df.loc[self.df['new_core_flag'] == 'Y']
-
-            num_delta = len(v_core_df) - len(new_core_df)
-            num_sign = 'fewer' if num_delta <= 0 else 'more'
-
-            inputs2 = [abs(num_delta),
-                       num_sign,
-                       len(veritiv_core),
-                  veritiv_core_avg_profit,
-                  veritiv_core_avg_turn,
-                  veritiv_core_avg_ncust,
-                  len(veritiv_non_core),
-                  veritiv_non_core_avg_profit,
-                  veritiv_non_core_avg_turn,
-                  veritiv_non_core_avg_ncust,
-                       ]
-
-            string2 = """\n\nCompared to the original Core products:
-            - The model identified {} {} Core products.
-            - Veritiv Core Flag Results:
-
-            Number of core products: {}
-            Core items average profit: {}
-            Core items average turnover: {}
-            Core items average number of customers: {}
-
-            Number of non core products: {}
-            Non Core Items Average Profit: {}
-            Non Core Items Average turnover: {}
-            Non Core Items Average number of customers: {}
-            """.format(*inputs2)
-            return string1 + string2
+        return 'Here I am!'
 
     def run(self):
         self.get_mappings()
         self.get_vectors()
-        self.get_flags()
+        self.reshape()
 
 
 if __name__ == '__main__':
     m = Vectorize(weights=[33.33, 33.33, 33.33],
+                  obj='Identify core products',
                   level='warehouse',
-                  selections=[19],
-                  objective='Identify products to remove',
+                  choices=['All'],
                   segment='Facility Solutions',
                   fields=[1, 1, 1],
                   field_options=['turn_6mos', 'profit_6mos', 'cogs_6mos'],
                   cutoff=20,
-                  df=getdf("../../../data/Clean_Data_short.xlsx"),
-                  fname="../../../data/Clean_Data.xlsx")
-
+                  df=getdf("../../data/Clean_Data_short.xlsx"),
+                  fname="../../data/Clean_Data_short.xlsx")
     m.run()
-    print(m.string_output())
-    # m.export()

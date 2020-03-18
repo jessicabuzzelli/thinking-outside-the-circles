@@ -2,3 +2,5 @@ data/**
 venv/**
 .ipynb_checkpoints/**
 gui/Clean_Data_short.xlsx
+/gui/Clean_Data_short_rationalized.xlsx
+/gui/Clean_Data_short_new_core.xlsx
