@@ -2,17 +2,16 @@ from tkinter import *
 import pandas as pd
 import numpy as np
 from scripts.vectorize import Vectorize
-
-# TODO - add override option for reccomeding products to cut
+from itertools import compress
 
 
 class GUI:
 
     def __init__(self):
+        self.root = Tk()
         self.home()
 
     def home(self):
-        self.root = Tk()
         # self.root.eval('tk::PlaceWindow %s center' % self.root.winfo_pathname(self.root.winfo_id()))
         self.root.title("Click UPLOAD to begin")
         self.root.config(bg="white")
@@ -27,17 +26,25 @@ class GUI:
         self.root.mainloop()
 
     def get_filename(self):
-        self.root.withdraw()
+        try:
+            self.root.withdraw()
+            self.loading.withdraw()
+
+        except:
+            pass
 
         from tkinter.filedialog import askopenfilename
         self.fname = askopenfilename()
 
-        if self.fname is None:
-            return
+        if self.fname is tuple():
+            self.home()
+        else:
+            self.loading1()
 
+    def loading1(self):
         loading = Toplevel()
         self.loading = loading
-        self.root.eval('tk::PlaceWindow %s center' % self.loading.winfo_pathname(self.loading.winfo_id()))
+        # self.root.eval('tk::PlaceWindow %s center' % self.loading.winfo_pathname(self.loading.winfo_id()))
         loading.title("Loading...")
         loading.config(bg="white")
         frame = Frame(loading)
@@ -69,7 +76,7 @@ class GUI:
         elif self.ext == '.csv':
             self.df = pd.read_csv(self.fname)
         else:
-            return 'Fileself.extension not valid. Select another file.'
+            return 'File extension not valid. Select another file.'
 
         self.df.columns = [c.replace(' ', '_').lower() for c in self.df.columns]
 
@@ -105,8 +112,12 @@ class GUI:
                    # 'pallet_quantity',
                    'margin_%']
 
-        self.field_options = ['turn_6mos', 'profit_6mos', 'customers_per_product'] + \
-                             [x for x in self.df.columns if x in options]
+        try:
+            self.field_options = ['turn_6mos', 'profit_6mos', 'customers_per_product'] + \
+                                 [x for x in self.df.columns if x in options]
+        except AttributeError:
+            self.loading.withdraw()
+            self.get_filename()
 
         wh_options = self.df.legacy_division_cd.unique().astype(str)
 
@@ -121,7 +132,7 @@ class GUI:
         if self.region_options is None:
             return 'no regions'
 
-        self.level_options = ['enterprise', 'warehouse', 'region']  # TODO - check to see if add hub
+        self.level_options = ['warehouse', 'region', 'enterprise']  # TODO - check to see if add hub
         self.region_options = np.append(['All'], self.region_options)
         self.wh_options = np.append(['All'], wh_options)
 
@@ -129,13 +140,21 @@ class GUI:
         self.segment_var = StringVar(self.root, value=self.segment_options[0])
         self.cutoff_var = StringVar(self.root, value='20')
         self.field_var = []
-        self.weight_var = []
+        self.weight_var = [StringVar(self.root, value='33.3'),
+                           StringVar(self.root, value='33.3'),
+                           StringVar(self.root, value='33.3')]
         self.region_var = StringVar(self.root, value='All')
-        self.level_var = StringVar(self.root, value='enterprise')
+        self.level_var = StringVar(self.root, value='warehouse')
         self.objective = StringVar(self.root, value='Identify core products')
 
     def input_page(self):
         self.loading.withdraw()
+
+        try:
+            # if tool has already done one analysis and needs to do another
+            self.outputs.withdraw()
+        except:
+            pass
 
         define = Toplevel()
         self.define = define
@@ -162,25 +181,37 @@ class GUI:
 
         Label(frame, text="Select field(s) to consider and enter weights: ").grid(row=4, column=0, pady=10)
 
+        self.btns = []
+        self.entries = []
+        self.rows = []
+        preselected = list(compress(list(range(len(self.field_options))), [float(x.get()) for x in self.weight_var]))
+
         for idx in range(len(self.field_options)):
-            if idx in [0, 1, 2]:
+            if idx in preselected:
                 var = IntVar(self.root, value=1)
                 weightvar = StringVar(self.root, value=33.33)
             else:
                 var = IntVar(self.root)
                 weightvar = IntVar(self.root, value=0)
+                self.weight_var.append(weightvar)
 
             self.field_var.append(var)
-            self.weight_var.append(weightvar)
 
             txt = self.field_options[idx]
 
-            Checkbutton(frame, text=txt, variable=self.field_var[idx], justify=LEFT, anchor="w")\
-                .grid(row=4 + idx, column=1, pady=10)
+            btn = Checkbutton(frame, text=txt, variable=self.field_var[idx], justify=LEFT, anchor="w")
+            btn.grid(row=4 + idx, column=1, pady=10)
 
-            Entry(frame, text=self.weight_var[idx].get(), textvariable=self.weight_var[idx]).grid(row=4 + idx, column=2, pady=10, padx=10)
+            entry = Entry(frame, text=self.weight_var[idx].get(), textvariable=self.weight_var[idx])
+            entry.grid(row=4 + idx, column=2, pady=10, padx=10)
+
+            self.btns += [btn]
+            self.entries += [entry]
+            self.rows += [4 + idx]
 
         self.last_row = 4 + len(self.field_options)
+
+        Button(frame, text="Set equal weights among checked fields", wraplength=150, command=self.reset_weights).grid(row=4, column=3, pady=10)
 
         frame.grid(row=4, column=len(self.field_options))
 
@@ -210,6 +241,21 @@ class GUI:
             self.region_label.grid(row=2, column=3, pady=10)
             self.region_optionmenu = OptionMenu(self.input_frame, self.region_var, *self.region_options)
             self.region_optionmenu.grid(row=2, column=4, pady=10)
+
+    def reset_weights(self):
+        total = sum([x.get() for x in self.field_var])
+        for x in range(len(self.field_var)):
+            if self.field_var[x].get() == 1:
+                self.entries[x].destroy()
+                self.weight_var[x] = StringVar(self.root, value=round(100 / total, 2))
+                self.entries[x] = Entry(self.input_frame, text=self.weight_var[x].get(), textvariable=self.weight_var[x])
+                self.entries[x].grid(row=self.rows[x], column=2, pady=10, padx=10)
+            else:
+                self.entries[x].destroy()
+                self.weight_var[x] = StringVar(self.root, value=0)
+                self.entries[x] = Entry(self.input_frame, text=self.weight_var[x].get(),
+                                        textvariable=self.weight_var[x])
+                self.entries[x].grid(row=self.rows[x], column=2, pady=10, padx=10)
 
     def check_inputs(self):
         try:
@@ -277,7 +323,9 @@ class GUI:
             self.model = Vectorize(level_var, region_var, *params)
 
         else:
-            self.model = Vectorize(level_var, wh_var, *params)
+            # self.model = Vectorize(level_var, wh_var, *params)
+            # enterprise pathway
+            pass
 
     def loading_page2(self):
         self.define.withdraw()
@@ -300,6 +348,7 @@ class GUI:
         self.output_page()
 
     def output_page(self):
+        self.redo = True
         self.loading2.withdraw()
 
         outputs = Toplevel()
@@ -307,22 +356,24 @@ class GUI:
         # self.root.eval('tk::PlaceWindow %s center' % self.outputs.winfo_pathname(self.outputs.winfo_id()))
         outputs.title("Outputs")
         outputs.config(bg="white")
-        frame = Frame(outputs)
+        self.output_frame = Frame(outputs)
 
-        Label(frame, text="Success!").grid(row=0, column=0, pady=10)
-        Button(frame, text="Export to Excel", command=self.export).grid(row=1, column=0, pady=10)
+        # Label(self.output_frame, text="Success!").grid(row=0, column=0, pady=10)
+        Button(self.output_frame, text="Export to Excel", command=self.export).grid(row=1, column=0, pady=10)
+        Button(self.output_frame, text="Rerun with new parameters", command=self.input_page).grid(row=2, column=0, pady=10)
 
-        text = Text(frame)
-        text.grid(row=2, column=0, pady=0)
+        text = Text(self.output_frame)
+        text.grid(row=3, column=0, pady=0)
         text.insert(INSERT, self.model.string_output())
 
-        frame.grid(row=2, column=2)
+        self.output_frame.grid(row=2, column=2)
 
         outputs.mainloop()
 
     def export(self):
         from tkinter.filedialog import asksaveasfilename
-        newfname = self.fname.split('/')[-1][:-len(self.ext) - 1] + '_new_core'
+        addon = '_new_core' if self.objective.get() == 'Identify core products' else '_rationalized'
+        newfname = self.fname.split('/')[-1][:-len(self.ext) - 1] + addon
 
         fout = asksaveasfilename(initialdir=''.join(self.fname.split('/')[:-1]),
                                  initialfile=newfname,
@@ -331,7 +382,9 @@ class GUI:
         if fout is '':
             return
         else:
-            self.model.export(fout)
+            self.model.df.to_excel(fout)
+
+            Label(self.output_frame, text="Exported successfully!").grid(row=0, column=0, pady=10)
 
 
 if __name__ == "__main__":
