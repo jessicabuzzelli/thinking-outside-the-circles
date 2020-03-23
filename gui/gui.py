@@ -1,9 +1,9 @@
 from tkinter import *
 import pandas as pd
 import numpy as np
-from scripts.vectorize import Vectorize
 from itertools import compress
-
+# from gui.scripts.vectorize import Vectorize
+from vectorize import Vectorize
 
 class GUI:
 
@@ -99,7 +99,8 @@ class GUI:
                 'core_item_flag',
                 'margin_%',
                 'net_oh_$',
-                'dioh']
+                'dioh',
+                'national_acct_flag']
 
         self.df = self.df[keep].fillna(0).replace('-', 0)
 
@@ -146,6 +147,7 @@ class GUI:
         self.region_var = StringVar(self.root, value='All')
         self.level_var = StringVar(self.root, value='warehouse')
         self.objective = StringVar(self.root, value='Identify core products')
+        self.natl_acct = IntVar(self.root, value=1)
 
     def input_page(self):
         self.loading.withdraw()
@@ -153,6 +155,7 @@ class GUI:
         try:
             # if tool has already done one analysis and needs to do another
             self.outputs.withdraw()
+
         except:
             pass
 
@@ -167,19 +170,25 @@ class GUI:
         Label(frame, text="Modify model inputs below and click RUN. ").grid(row=0, column=1, pady=10)
         Button(frame, text="RUN", width=8, command=self.check_inputs).grid(row=0, column=2, pady=10)
 
-        Label(frame, text="Select segment: ").grid(row=1, column=0, pady=10)
-        OptionMenu(frame, self.segment_var, *self.segment_options).grid(row=1, column=1, pady=10)
+        Label(frame, text="Select model goal: ").grid(row=1, column=0, pady=10)
+        OptionMenu(frame, self.objective, 'Identify core products', 'Identify products to remove')\
+            .grid(row=1, column=1, pady=10)
 
-        Label(frame, text="Select scope level and press REFRESH: ").grid(row=2, column=0, pady=10)
-        OptionMenu(frame, self.level_var, *self.level_options).grid(row=2, column=1, pady=10)
-        Button(frame, text='REFRESH', command=self.popup_level_options).grid(row=2, column=2, pady=10)
+        Label(frame, text="Select segment: ").grid(row=2, column=0, pady=10)
+        OptionMenu(frame, self.segment_var, *self.segment_options).grid(row=2, column=1, pady=10)
 
-        Label(frame, text="Select model goal: ").grid(row=3, column=0, pady=10)
-        OptionMenu(frame, self.objective, 'Identify core products', 'Identify products to remove').grid(row=3, column=1, pady=10)
-        Label(frame, text="Set % to identify: ").grid(row=3, column=2, pady=10)
-        Entry(frame, textvariable=self.cutoff_var).grid(row=3, column=3, pady=10)
+        Label(frame, text="Exclude products ordered by national account(s)? ").grid(row=3, column=0, pady=10)
+        Checkbutton(frame, text='', variable=self.natl_acct, justify=LEFT, anchor="w").grid(row=3, column=1)
 
-        Label(frame, text="Select field(s) to consider and enter weights: ").grid(row=4, column=0, pady=10)
+        Label(frame, text="Select scope level and press REFRESH: ").grid(row=4, column=0, pady=10)
+        OptionMenu(frame, self.level_var, *self.level_options).grid(row=4, column=1, pady=10)
+        Button(frame, text='REFRESH', command=self.popup_level_options).grid(row=4, column=2, pady=10)
+
+
+        Label(frame, text="Set % to identify: ").grid(row=5, column=0, pady=10)
+        Entry(frame, textvariable=self.cutoff_var).grid(row=5, column=1, pady=10)
+
+        Label(frame, text="Select field(s) to consider and enter weights: ").grid(row=6, column=0, pady=10)
 
         self.btns = []
         self.entries = []
@@ -200,10 +209,10 @@ class GUI:
             txt = self.field_options[idx]
 
             btn = Checkbutton(frame, text=txt, variable=self.field_var[idx], justify=LEFT, anchor="w")
-            btn.grid(row=4 + idx, column=1, pady=10)
+            btn.grid(row=6 + idx, column=1, pady=10)
 
             entry = Entry(frame, text=self.weight_var[idx].get(), textvariable=self.weight_var[idx])
-            entry.grid(row=4 + idx, column=2, pady=10, padx=10)
+            entry.grid(row=6 + idx, column=2, pady=10, padx=10)
 
             self.btns += [btn]
             self.entries += [entry]
@@ -211,7 +220,8 @@ class GUI:
 
         self.last_row = 4 + len(self.field_options)
 
-        Button(frame, text="Set equal weights among checked fields", wraplength=150, command=self.reset_weights).grid(row=4, column=3, pady=10)
+        Button(frame, text="Set equal weights among checked fields", wraplength=150, command=self.reset_weights)\
+            .grid(row=6, column=3, pady=10)
 
         frame.grid(row=4, column=len(self.field_options))
 
@@ -232,15 +242,15 @@ class GUI:
 
         if self.level_var.get() == 'warehouse':
             self.wh_label = Label(self.input_frame, text="Select warehouse(s): ")
-            self.wh_label.grid(row=2, column=3, pady=10, padx=10)
+            self.wh_label.grid(row=4, column=3, pady=10, padx=10)
             self.wh_optionmenu = OptionMenu(self.input_frame, self.wh_var, *self.wh_options)
-            self.wh_optionmenu.grid(row=2, column=4, pady=10)
+            self.wh_optionmenu.grid(row=4, column=4, pady=10)
 
         elif self.level_var.get() == 'region':
             self.region_label = Label(self.input_frame, text="Select region(s): ")
-            self.region_label.grid(row=2, column=3, pady=10)
+            self.region_label.grid(row=4, column=3, pady=10)
             self.region_optionmenu = OptionMenu(self.input_frame, self.region_var, *self.region_options)
-            self.region_optionmenu.grid(row=2, column=4, pady=10)
+            self.region_optionmenu.grid(row=4, column=4, pady=10)
 
     def reset_weights(self):
         total = sum([x.get() for x in self.field_var])
@@ -299,6 +309,7 @@ class GUI:
         region_var = self.region_var.get()
         level_var = self.level_var.get()
         obj_var = self.objective.get()
+        natl_acct_var = self.natl_acct.get()
 
         try:
             wh_var = [int(wh_var)]
@@ -314,7 +325,15 @@ class GUI:
             assert region_var == 'All'
             region_var = self.df['legacy_system_cd'].unique()
 
-        params = [obj_var, segment_var, field_var, self.field_options, self.cutoff, self.weights, self.df, self.fname]
+        params = [obj_var,
+                  segment_var,
+                  field_var,
+                  natl_acct_var,
+                  self.field_options,
+                  self.cutoff,
+                  self.weights,
+                  self.df,
+                  self.fname]
 
         if level_var == 'warehouse':
             self.model = Vectorize(level_var, wh_var, *params)
