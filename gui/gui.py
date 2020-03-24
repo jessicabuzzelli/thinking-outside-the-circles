@@ -3,7 +3,8 @@ import pandas as pd
 import numpy as np
 from itertools import compress
 # from gui.scripts.vectorize import Vectorize
-from vectorize import Vectorize
+from vectorize import Vectorize, EnterpriseClassifications
+
 
 class GUI:
 
@@ -133,7 +134,7 @@ class GUI:
         if self.region_options is None:
             return 'no regions'
 
-        self.level_options = ['warehouse', 'region', 'enterprise']  # TODO - check to see if add hub
+        self.level_options = ['warehouse', 'division', 'enterprise']  # TODO - check to see if add hub
         self.region_options = np.append(['All'], self.region_options)
         self.wh_options = np.append(['All'], wh_options)
 
@@ -145,7 +146,7 @@ class GUI:
                            StringVar(self.root, value='33.3'),
                            StringVar(self.root, value='33.3')]
         self.region_var = StringVar(self.root, value='All')
-        self.level_var = StringVar(self.root, value='warehouse')
+        self.level_var = StringVar(self.root, value='enterprise')
         self.objective = StringVar(self.root, value='Identify core products')
         self.natl_acct = IntVar(self.root, value=1)
 
@@ -216,9 +217,9 @@ class GUI:
 
             self.btns += [btn]
             self.entries += [entry]
-            self.rows += [4 + idx]
+            self.rows += [6 + idx]
 
-        self.last_row = 4 + len(self.field_options)
+        self.last_row = 6 + len(self.field_options)
 
         Button(frame, text="Set equal weights among checked fields", wraplength=150, command=self.reset_weights)\
             .grid(row=6, column=3, pady=10)
@@ -342,9 +343,7 @@ class GUI:
             self.model = Vectorize(level_var, region_var, *params)
 
         else:
-            # self.model = Vectorize(level_var, wh_var, *params)
-            # enterprise pathway
-            pass
+            self.model = EnterpriseClassifications(*params)
 
     def loading_page2(self):
         self.define.withdraw()
@@ -391,7 +390,8 @@ class GUI:
 
     def export(self):
         from tkinter.filedialog import asksaveasfilename
-        addon = '_new_core' if self.objective.get() == 'Identify core products' else '_rationalized'
+        addon = '_' + self.level_var.get()
+        addon += '_new_core' if self.objective.get() == 'Identify core products' else '_rationalized'
         newfname = self.fname.split('/')[-1][:-len(self.ext) - 1] + addon
 
         fout = asksaveasfilename(initialdir=''.join(self.fname.split('/')[:-1]),
