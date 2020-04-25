@@ -346,7 +346,7 @@ class GUI:
             self.model = Vectorize(level_var, region_var, *params)
 
         else:
-            self.model = EnterpriseClassifications(*params)
+            self.model = Vectorize('region', 'All', *params)
 
     def loading_page2(self):
         self.define.withdraw()
