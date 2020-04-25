@@ -1,4 +1,5 @@
 from tkinter import *
+from tkinter.ttk import *
 import pandas as pd
 import numpy as np
 from itertools import compress
@@ -11,6 +12,7 @@ class GUI:
     def __init__(self):
         self.root = Tk()
         self.home()
+        self.root.geometry("500x200")
 
     def home(self):
         # self.root.eval('tk::PlaceWindow %s center' % self.root.winfo_pathname(self.root.winfo_id()))
@@ -101,9 +103,11 @@ class GUI:
                 'margin_%',
                 'net_oh_$',
                 'dioh',
-                'national_acct_flag']
+                'national_acct_flag',
+                'item_poi_days',
+                ]
 
-        self.df = self.df[keep].fillna(0).replace('-', 0)
+        self.df = self.df[keep].fillna(0).replace('-', 0).replace('No Venloc', 0)
 
     def set_vars(self):
         options = ['sales_6_mos',
@@ -134,7 +138,7 @@ class GUI:
         if self.region_options is None:
             return 'no regions'
 
-        self.level_options = ['warehouse', 'division', 'enterprise']  # TODO - check to see if add hub
+        self.level_options = ['warehouse', 'region', 'enterprise']
         self.region_options = np.append(['All'], self.region_options)
         self.wh_options = np.append(['All'], wh_options)
 
@@ -146,7 +150,7 @@ class GUI:
                            StringVar(self.root, value='33.3'),
                            StringVar(self.root, value='33.3')]
         self.region_var = StringVar(self.root, value='All')
-        self.level_var = StringVar(self.root, value='enterprise')
+        self.level_var = StringVar(self.root, value='warehouse')
         self.objective = StringVar(self.root, value='Identify core products')
         self.natl_acct = IntVar(self.root, value=1)
 
@@ -179,12 +183,11 @@ class GUI:
         OptionMenu(frame, self.segment_var, *self.segment_options).grid(row=2, column=1, pady=10)
 
         Label(frame, text="Exclude products ordered by national account(s)? ").grid(row=3, column=0, pady=10)
-        Checkbutton(frame, text='', variable=self.natl_acct, justify=LEFT, anchor="w").grid(row=3, column=1)
+        Checkbutton(frame, text='', variable=self.natl_acct).grid(row=3, column=1)
 
         Label(frame, text="Select scope level and press REFRESH: ").grid(row=4, column=0, pady=10)
         OptionMenu(frame, self.level_var, *self.level_options).grid(row=4, column=1, pady=10)
         Button(frame, text='REFRESH', command=self.popup_level_options).grid(row=4, column=2, pady=10)
-
 
         Label(frame, text="Set % to identify: ").grid(row=5, column=0, pady=10)
         Entry(frame, textvariable=self.cutoff_var).grid(row=5, column=1, pady=10)
@@ -209,7 +212,7 @@ class GUI:
 
             txt = self.field_options[idx]
 
-            btn = Checkbutton(frame, text=txt, variable=self.field_var[idx], justify=LEFT, anchor="w")
+            btn = Checkbutton(frame, text=txt, variable=self.field_var[idx])
             btn.grid(row=6 + idx, column=1, pady=10)
 
             entry = Entry(frame, text=self.weight_var[idx].get(), textvariable=self.weight_var[idx])
@@ -221,7 +224,7 @@ class GUI:
 
         self.last_row = 6 + len(self.field_options)
 
-        Button(frame, text="Set equal weights among checked fields", wraplength=150, command=self.reset_weights)\
+        Button(frame, text="Set equal weights among checked fields", command=self.reset_weights)\
             .grid(row=6, column=3, pady=10)
 
         frame.grid(row=4, column=len(self.field_options))
@@ -384,7 +387,14 @@ class GUI:
         text.grid(row=3, column=0, pady=0)
         text.insert(INSERT, self.model.string_output())
 
-        self.output_frame.grid(row=2, column=2)
+        self.output_frame.grid(row=3, column=1)
+
+        # self.output_frame.grid_columnconfigure(0, weight=1)
+        # self.output_frame.grid_columnconfigure(1, weight=1)
+        # self.output_frame.grid_rowconfigure(0, weight=1)
+        # self.output_frame.grid_rowconfigure(1, weight=1)
+        # self.output_frame.grid_rowconfigure(2, weight=1)
+        # self.output_frame.grid_rowconfigure(3, weight=1)
 
         outputs.mainloop()
 
