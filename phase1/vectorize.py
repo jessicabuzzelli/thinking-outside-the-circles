@@ -329,5 +329,7 @@ class EnterpriseClassifications:
         self.df.loc[:, 'enterprise ' + self.targetname] = self.df['enterprise ' + self.targetname] \
             .map(lambda x: 1 if x >= 1 else 0)
 
+        self.warehouse_model.df = self.df
+
     def string_output(self):
-        return "Hooray!"
+        return self.warehouse_model.string_output()

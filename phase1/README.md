@@ -5,16 +5,16 @@
 1. ```tkinter 0.1.0```
 
 ### Input file spec requirements:
-- An Excel notebook with a sheet named ```Sheet 1``` or a CSV
+- Training data contained in: (1) an Excel notebook's ```Sheet 1``` or (2) a CSV with headers
 - Rows will represent a unique (```legacy_customer_cd```, ```legacy_division_cd```, ```legacy_product_cd```) combinations.
 - Columns will represent attribute fields and will include:
-   - ```sales 6 mos```
    - ```cogs 6mos```
    - ```core item flag```
    - ```segment```
    - ```national acct flag```
    - ```sales channel```
    - ```qty 6mos```
+   - ```sales 6 mos``` (note inconsistent naming convention)
    - ```picks 6mos```
    - ```net OH $```
    - ```item poi days```
