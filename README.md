@@ -2,7 +2,7 @@
 
 This repo contains Georgia Tech's Spring 2020 Industrial Engineering Senior Design Team 17's final client deliverables.
 
-All materials herein (and in the intermediate versions) do not contain figures or data in accordance with the project's NDA.
+All materials herein (and in the intermediate versions) are in accordance with the project's NDA.
 
 ##### Team members: 
 Jessica Buzzelli,
@@ -10,8 +10,9 @@ Nataly Granados,
 Dan Kim,
 Sean Ko,
 Iris Liu,
-Armando Marimon, and
-Diego Fernandez Padron
+Armando Marimon,
+Diego Fernandez Padron,
+and Emily Young
 
 ##### Faculty Advisor: 
 Dr. Leon McGinnis
@@ -28,8 +29,7 @@ classify the catalog.
 The score is modeled after a p-dimensonal vector norm and is calcuated as follows:
 ![](images/formula.png)
 
-We suggest use of correlation analysis before choosing decision metrics for the model in order to uphold an independence assumption
-implied by the formulation.
+We suggest use of correlation analysis before choosing decision metrics for the model in order to uphold an independence assumption implied by the formulation.
 
 ### Phase II
 Since the client has grown primarily through acquisition, it has inherited a decentralized warehousing network with 
