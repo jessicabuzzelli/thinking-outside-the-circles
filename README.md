@@ -2,7 +2,7 @@
 
 This repo contains Georgia Tech's Spring 2020 Industrial Engineering Senior Design Team 17's final client deliverables.
 
-All materials herein (and in the intermediate versions) are in accordance with the project's NDA.
+All materials shared herein (and in the intermediate versions) cover topics not bound by the project's NDA.
 
 ##### Team members: 
 Jessica Buzzelli,
